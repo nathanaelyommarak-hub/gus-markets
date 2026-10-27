@@ -251,7 +251,7 @@ upload:
     enabled: true
     privacy: public           # public | unlisted | private
     category_id: "25"         # News & Politics
-    contains_synthetic_media: false
+    contains_synthetic_media: true   # AI voice/altered content disclosure (status.containsSyntheticMedia)
     notify_subscribers: false
   instagram:
     enabled: false          # on once IG account + token exist

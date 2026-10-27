@@ -19,7 +19,7 @@ def upload(video_path, meta, ycfg):
     body = {"snippet": {"title": meta["title"], "description": meta["description"], "tags": meta["tags"][:15],
                         "categoryId": ycfg.get("category_id", "25"), "defaultLanguage": "en", "defaultAudioLanguage": "en"},
             "status": {"privacyStatus": ycfg.get("privacy", "public"), "selfDeclaredMadeForKids": False,
-                       "containsSyntheticMedia": bool(ycfg.get("contains_synthetic_media", False)), "embeddable": True}}
+                       "containsSyntheticMedia": bool(ycfg.get("contains_synthetic_media", True)), "embeddable": True}}
     req = yt.videos().insert(part="snippet,status", body=body, notifySubscribers=ycfg.get("notify_subscribers", False),
                              media_body=MediaFileUpload(video_path, mimetype="video/mp4", chunksize=8 << 20, resumable=True))
     resp = None
