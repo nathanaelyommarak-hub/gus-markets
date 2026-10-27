@@ -120,8 +120,19 @@ def index_history(cfg, symbol, days=30):
                 pts = fred_series(cfg, meta["fred"], days + 10)
                 src = "FRED (S&P Dow Jones Indices / Nasdaq)"
             elif prov == "alphavantage":
-                pts = _cached(f"av_{meta['av']}", 360, lambda: _alphavantage(meta["av"]))
-                src = f"Alpha Vantage ({meta['av']} ETF proxy)"
+                # AV only has the ETF (SPY/QQQ ~ 1/10 of the index level) -> never show the ETF price as the index.
+                # Index levels come from FRED; AV only extends the series by sessions FRED has not published yet,
+                # scaled by the index/ETF ratio on the latest common date (one-day error << 0.1 %).
+                av = _cached(f"av_{meta['av']}", 360, lambda: _alphavantage(meta["av"]))
+                fr = fred_series(cfg, meta["fred"], days + 10)
+                avd = dict(av); frd = dict(fr)
+                common = sorted(set(avd) & set(frd))
+                if not common:
+                    raise RuntimeError("no common date between FRED index and AV ETF for scaling")
+                ratio = frd[common[-1]] / avd[common[-1]]
+                newer = [(d, v * ratio) for d, v in av if d > fr[-1][0]]
+                pts = list(fr) + newer
+                src = (f"FRED + Alpha Vantage ({meta['av']}-scaled latest close)" if newer else "FRED (S&P Dow Jones Indices / Nasdaq)")
             elif prov == "yahoo":
                 if os.environ.get("CI") == "true" and not os.environ.get("ALLOW_YAHOO"):
                     continue  # Yahoo ToS: personal use only -> never in production runs

@@ -73,7 +73,7 @@ def badge_assets(cfg, snap, spoken):
                 ad = dt.date.fromisoformat(str(i["asof"])[:10])
                 out.append({"key": key, "ticker": "S&P 500" if key == "SPX" else "NASDAQ", "name": "US stock index",
                             "price": f"{i['last']:,.0f}", "chg": i["chg_1d"], "period": "1 day", "points": i["points"][-15:],
-                            "asof": f"CLOSE {ad:%a %b} {ad.day} · {i['source']}".upper()})
+                            "asof": f"CLOSE {ad:%a %b} {ad.day} · {i['source'].split(' (')[0]}".upper()})
             elif key == "US10Y":
                 f = snap.get("fred", {}).get("DGS10")
                 if not f: continue
