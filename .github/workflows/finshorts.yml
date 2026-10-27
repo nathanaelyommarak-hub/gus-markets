@@ -108,7 +108,7 @@ jobs:
             python - "$f" <<'PY'
           import json, sys
           l = json.load(open(sys.argv[1]))
-          print(f"::notice title=finshorts {l['job_id']}::LLM={l.get('script_provider')} video={l.get('probed_duration')}s "
+          print(f"::notice title=finshorts-{l['job_id']}::LLM={l.get('script_provider')} video={l.get('probed_duration')}s "
                 f"tts={l.get('tts_seconds')}s render={l.get('render_seconds')}s total={l.get('total_seconds')}s "
                 f"youtube={l.get('youtube', 'dry-run')}")
           PY
