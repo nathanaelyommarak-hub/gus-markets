@@ -254,7 +254,7 @@ upload:
     contains_synthetic_media: false
     notify_subscribers: false
   instagram:
-    enabled: true
+    enabled: false          # on once IG account + token exist
     mode: resumable           # resumable (graph.facebook.com, no hosting needed) | url (needs public URL)
     graph_version: "v26.0"
     share_to_feed: true
