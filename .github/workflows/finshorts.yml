@@ -86,9 +86,6 @@ jobs:
         run: |
           pip install --extra-index-url https://download.pytorch.org/whl/cpu torch==2.6.0+cpu
           pip install -r requirements.txt
-      - name: warm rembg model (u2netp, cached)
-        if: steps.gate.outputs.due == 'true'
-        run: python -c "from rembg import new_session; new_session('u2netp')" || echo "rembg warm-up failed (portraits fall back to framed photo)"
       - name: run
         id: run
         if: steps.gate.outputs.due == 'true'
