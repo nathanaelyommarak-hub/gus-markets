@@ -1,0 +1,36 @@
+# --- secrets (never commit) ---
+secrets/
+.env
+.env.*
+!.env.example
+client_secret*.json
+*token*.json
+*credentials*.json
+*.pem
+*.key
+
+# --- generated / local ---
+out/
+tts_samples/
+.cache/
+.venv/
+__pycache__/
+*.pyc
+setup_venv.log
+*.log
+
+# --- runtime state: only the dedupe log is tracked (committed back by the workflow) ---
+state/*
+!state/.gitkeep
+!state/upload_log.json
+
+# --- model weights / large binaries ---
+*.onnx
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.ckpt
+*.mp4
+*.wav
+*.mp3

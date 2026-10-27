@@ -1,0 +1,271 @@
+# ============================================================
+#  FinShorts configuration  (all channel-facing text = English)
+# ============================================================
+channel:
+  name: "Gus Markets"             # final (YouTube + Instagram); env CHANNEL_NAME overrides
+  handle: "@GusMarkets"
+  mascot: "Gus"
+  catchphrase: "Already forgot the dip. Next."
+  disclaimer: "Not financial advice. For entertainment and education only."
+  timezone: "UTC"
+  audience_timezone: "Europe/Berlin"   # slot times below are UTC; Berlin = UTC+1 (winter) / UTC+2 (summer)
+
+# ---------------- brand ----------------
+brand:
+  navy: "#0B1630"
+  mint: "#22E39B"      # up / green signal
+  coral: "#FF4D5E"     # down / red signal
+  orange: "#FF8A3D"    # Gus + numbers
+  white: "#FFFFFF"
+  font_title: "assets/fonts/Montserrat-ExtraBold.ttf"   # titles + captions (OFL)
+  font_body: "assets/fonts/Inter.ttf"                   # body text (OFL)
+
+# ---------------- output ----------------
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  min_seconds: 25
+  max_seconds: 40            # target 25-40 s; TTS speed auto-adjusts (0.88-1.2) to fit
+  hard_max_seconds: 40.0     # HARD cap for the final file (voice + music tail), checked before and after render
+  tail: 0.8                  # music tail after the last word (shrinks to 0.3 s if needed)
+  min_speed: 0.88
+  max_speed: 1.2
+  comfortable_speed: 1.1     # trim optional lines before going faster than this
+  est_words_per_sec: 2.3     # pre-TTS length estimate at speed 1.0 -> trims the script before synthesis
+  crf: 20
+  preset: "veryfast"
+
+# ---------------- ramp-up ----------------
+schedule:
+  start_date: "2026-10-28"     # day 0 of the ramp
+  start_per_day: 3
+  target_per_day: 10
+  ramp_days: 14
+  # 10 slots (UTC; Berlin = +1 h in winter). Slot i is active when i < videos_per_day(today).
+  # Order = priority: the first 3 (all evening Berlin time) run from day 0. Min. 45 min between uploads.
+  slots:
+    - {id: s01, utc: "18:00", format: crypto_update}      # 19:00 Berlin  Crypto Evening
+    - {id: s02, utc: "21:15", format: close_recap}        # 22:15 Berlin  after NYSE close (20:00/21:00 UTC)
+    - {id: s03, utc: "16:30", format: chart_of_the_day}   # 17:30 Berlin
+    - {id: s04, utc: "14:45", format: us_open}            # 15:45 Berlin  after the open in both DST phases
+    - {id: s05, utc: "19:30", format: quiz}               # 20:30 Berlin
+    - {id: s06, utc: "12:00", format: pre_market}         # 13:00 Berlin
+    - {id: s07, utc: "11:00", format: macro_calendar}     # 12:00 Berlin
+    - {id: s08, utc: "20:30", format: explainer}          # 21:30 Berlin
+    - {id: s09, utc: "13:00", format: midday_movers}      # 14:00 Berlin
+    - {id: s10, utc: "07:00", format: crypto_morning}     # 08:00 Berlin
+  # stock markets are closed on weekends -> swap or skip stock slots (Sat = 5, Sun = 6 by UTC weekday)
+  weekend_overrides:
+    sat: {close_recap: week_recap, us_open: myth_buster, pre_market: skip, macro_calendar: skip}
+    sun: {close_recap: skip, us_open: myth_buster, pre_market: week_ahead, macro_calendar: skip}
+
+# ---------------- formats ----------------
+formats:
+  pre_market:
+    label: "PRE-MARKET"
+    topic: [stocks, macro]
+    chart: {kind: index, symbol: "^GSPC", days: 30}
+    needs_story: true
+    news_topics: [stocks, macro]      # strict story matching
+  crypto_update:
+    label: "CRYPTO UPDATE"
+    topic: [crypto]
+    chart: {kind: coin, id: bitcoin, days: 7}
+    needs_story: true
+    news_topics: [crypto]      # strict story matching
+  chart_of_the_day:
+    label: "CHART OF THE DAY"
+    topic: [stocks, crypto, macro]
+    chart: {kind: rotate}         # rotates across BTC / ETH / S&P 500 / Nasdaq / 10Y yield
+    needs_story: false
+  explainer:
+    label: "60-SECOND MBA"
+    topic: [macro]
+    chart: {kind: fred, series: DGS10, days: 180}
+    needs_story: false
+    topics_pool: [bond_yields, inflation, rate_cuts, market_cap, etf, halving, dollar_index]
+  quiz:
+    label: "FISHBOWL QUIZ"
+    topic: [crypto, stocks]
+    chart: {kind: coin, id: ethereum, days: 30}
+    needs_story: false
+  crypto_morning:
+    label: "MORNING CRYPTO"
+    kind: crypto
+    topic: [crypto]
+    chart: {kind: coin, id: bitcoin, days: 1}
+    needs_story: true
+    news_topics: [crypto]      # strict story matching
+  us_open:
+    label: "US OPEN"
+    kind: stocks
+    topic: [stocks, macro]
+    chart: {kind: index, symbol: "^IXIC", days: 30}
+    needs_story: true
+    news_topics: [stocks, macro]      # strict story matching
+  close_recap:
+    label: "CLOSING BELL"
+    kind: stocks
+    topic: [stocks, crypto, macro]
+    chart: {kind: index, symbol: "^GSPC", days: 10}
+    needs_story: true
+    news_topics: [stocks, macro]      # strict story matching
+  midday_movers:
+    label: "MIDDAY MOVERS"
+    kind: movers
+    topic: [crypto]
+    chart: {kind: movers}
+    needs_story: false
+  macro_calendar:
+    label: "MACRO CALENDAR"
+    kind: calendar
+    topic: [macro]
+    chart: {kind: fred, series: DFF, days: 365}
+    needs_story: false
+  week_recap:
+    label: "WEEK IN REVIEW"
+    kind: stocks
+    topic: [stocks, crypto, macro]
+    chart: {kind: index, symbol: "^GSPC", days: 7}
+    needs_story: true
+    news_topics: [stocks, macro]      # strict story matching
+  recap:
+    label: "DAILY RECAP"
+    topic: [stocks, crypto, macro]
+    chart: {kind: index, symbol: "^GSPC", days: 5}
+    needs_story: true
+    news_topics: [stocks, macro]      # strict story matching
+  macro_watch:
+    label: "MACRO WATCH"
+    topic: [macro]
+    chart: {kind: fred, series: DGS10, days: 90}
+    needs_story: true
+    news_topics: [macro]      # strict story matching
+  top_movers:
+    label: "TOP MOVERS"
+    topic: [crypto]
+    chart: {kind: movers}
+    needs_story: false
+  myth_buster:
+    label: "MYTH BUSTER"
+    topic: [crypto, stocks]
+    chart: {kind: coin, id: bitcoin, days: 365}
+    needs_story: false
+  week_ahead:
+    label: "WEEK AHEAD"
+    topic: [macro, stocks]
+    chart: {kind: index, symbol: "^GSPC", days: 90}
+    needs_story: true
+    news_topics: [stocks, macro]      # strict story matching
+
+# ---------------- market data ----------------
+data:
+  coingecko:
+    base_url: "https://api.coingecko.com/api/v3"   # Demo plan root (key via env COINGECKO_API_KEY)
+    coins: [bitcoin, ethereum, solana, ripple, dogecoin]
+  stocks:
+    # provider order; first that works wins.
+    #  alphavantage = official free key (25 req/day) -> commercial-friendlier
+    #  fred         = S&P 500 / Nasdaq daily closes, keyless CSV or API key
+    #  yahoo        = unofficial endpoint, personal use only per Yahoo ToS -> dev/dry-run only
+    providers: [alphavantage, fred, yahoo]
+    indices:
+      "^GSPC": {name: "S&P 500", fred: SP500, av: SPY}
+      "^IXIC": {name: "Nasdaq", fred: NASDAQCOM, av: QQQ}
+  fred_series:
+    DGS10: "10-year Treasury yield"
+    DFF: "Fed funds rate"
+    DTWEXBGS: "US dollar index (broad)"
+  cache_minutes: 50
+
+# ---------------- news / fact check ----------------
+news:
+  max_age_hours: 18
+  min_independent_sources: 2
+  similarity_threshold: 0.28
+  feeds:
+    # owner = corporate group; sources with the same owner do NOT count as independent
+    - {name: CoinDesk,        owner: coindesk,     topic: crypto, url: "https://www.coindesk.com/arc/outboundfeeds/rss/"}
+    - {name: Cointelegraph,   owner: cointelegraph, topic: crypto, url: "https://cointelegraph.com/rss"}
+    - {name: Decrypt,         owner: decrypt,      topic: crypto, url: "https://decrypt.co/feed"}
+    - {name: Bitcoin Magazine, owner: btcinc,      topic: crypto, url: "https://bitcoinmagazine.com/.rss/full/"}
+    - {name: CryptoSlate,     owner: cryptoslate,  topic: crypto, url: "https://cryptoslate.com/feed/"}
+    - {name: The Block,       owner: theblock,     topic: crypto, url: "https://www.theblock.co/rss.xml"}
+    - {name: CNBC Markets,    owner: nbcuniversal, topic: stocks, url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"}
+    - {name: CNBC Economy,    owner: nbcuniversal, topic: macro,  url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"}
+    - {name: MarketWatch,     owner: dowjones,     topic: stocks, url: "https://feeds.content.dowjones.io/public/rss/mw_topstories"}
+    - {name: Yahoo Finance,   owner: yahoo,        topic: stocks, url: "https://finance.yahoo.com/news/rssindex"}
+    - {name: Investing.com,   owner: investing,    topic: stocks, url: "https://www.investing.com/rss/news_25.rss"}
+    - {name: Federal Reserve, owner: fed,          topic: macro,  url: "https://www.federalreserve.gov/feeds/press_all.xml"}
+    - {name: Seeking Alpha,   owner: seekingalpha, topic: stocks, url: "https://seekingalpha.com/market_currents.xml"}
+    - {name: Fortune,         owner: fortune,      topic: stocks, url: "https://fortune.com/feed/fortune-feeds/?id=3230629"}
+    - {name: BBC Business,    owner: bbc,          topic: macro,  url: "https://feeds.bbci.co.uk/news/business/rss.xml"}
+    - {name: Guardian Business, owner: guardian,   topic: macro,  url: "https://www.theguardian.com/uk/business/rss"}
+
+# ---------------- LLM ----------------
+llm:
+  # tried in order; on any error / validation failure -> next; last resort = template
+  providers: [groq, gemini, ollama, template]
+  groq:   {model: "openai/gpt-oss-120b", base_url: "https://api.groq.com/openai/v1"}
+  gemini: {model: "gemini-flash-lite-latest"}
+  ollama: {model: "qwen2.5:3b", base_url: "http://localhost:11434"}
+  temperature: 0.8
+  max_retries: 2
+
+# ---------------- TTS ----------------
+tts:
+  engine: kokoro
+  kokoro:
+    repo_id: "hexgrad/Kokoro-82M"
+    lang_code: "a"            # American English
+    voice: "am_michael"       # deep, calm male newsreader
+    speed: 1.0
+  piper:                      # fallback engine
+    model: "en_US-john-medium"
+    length_scale: 1.0
+  subtitles: engine           # engine (Kokoro timestamps) | whisper (faster-whisper)
+
+# ---------------- music ----------------
+music:
+  source: generated           # generated = synthesized at runtime (no third-party rights) | file
+  file: ""                    # CC0 file path if source=file
+  volume_db: -23
+
+# ---------------- community (all off by default; see finshorts/community.py) ----------------
+community:
+  telegram_poll: false          # post the video's poll question as a native Telegram poll (sendPoll)
+  telegram_poll_slot: s01       # ONE poll per day (19:00 Berlin video), not one per upload
+  youtube_comment: false        # post the poll/pinned text as a comment (50 quota units; needs youtube.force-ssl); pin manually
+  instagram_comment: false      # POST /{media-id}/comments (instagram_manage_comments); pin manually in the app
+  poll_open_hours: 24
+
+# ---------------- approval & upload ----------------
+approval:
+  telegram: false             # set true + TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
+  timeout_minutes: 25
+  on_timeout: skip            # skip | approve
+
+upload:
+  youtube:
+    enabled: true
+    privacy: public           # public | unlisted | private
+    category_id: "25"         # News & Politics
+    contains_synthetic_media: false
+    notify_subscribers: false
+  instagram:
+    enabled: true
+    mode: resumable           # resumable (graph.facebook.com, no hosting needed) | url (needs public URL)
+    graph_version: "v26.0"
+    share_to_feed: true
+    max_hashtags: 4             # 3-4 focused hashtags (YT + IG)
+  hosting:                    # only for instagram.mode = url
+    provider: github_release  # github_release | r2
+    delete_after_publish: true
+
+motion:                      # motion-graphics scene layer (own designs; no publisher/coin/company logos)
+  enabled: true
+  sfx: true                  # self-synthesised whoosh / pop / tick
+  sfx_db: -9
+  people: true               # portraits only from Wikimedia Commons with PD / CC0 / CC BY / CC BY-SA
+  cutout: true               # rembg (MIT, u2netp) background removal - not applied to CC BY-SA images
