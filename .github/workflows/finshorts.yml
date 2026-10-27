@@ -1,18 +1,21 @@
 name: finshorts
 # One cron per slot (UTC). GitHub may start scheduled jobs 5-30 min late; run.py --auto accepts a 40-min window
-# and only runs as many slots as the ramp allows (3/day -> 10/day over 14 days, see config/config.yaml).
+# and only runs the slots active in the current launch phase (config/config.yaml schedule.phases):
+#   from 2026-10-28: s01-s03 only (17:30 / 19:00 / 22:15 Europe/Zurich), from 2026-11-11: all 10 slots.
+# Inactive slots exit in the cheap "slot due?" step (~20 s) before any heavy install.
+# Times in comments = Europe/Zurich winter time (UTC+1); in summer time (from 2027-03-28) they are +1 h later locally.
 on:
   schedule:
-    - cron: "0 18 * * *"      # s01 crypto_update  (19:00 Berlin winter)
-    - cron: "15 21 * * *"     # s02 close_recap  (22:15 Berlin winter)
-    - cron: "30 16 * * *"     # s03 chart_of_the_day  (17:30 Berlin winter)
-    - cron: "45 14 * * *"     # s04 us_open  (15:45 Berlin winter)
-    - cron: "30 19 * * *"     # s05 quiz  (20:30 Berlin winter)
-    - cron: "0 12 * * *"      # s06 pre_market  (13:00 Berlin winter)
-    - cron: "0 11 * * *"      # s07 macro_calendar  (12:00 Berlin winter)
-    - cron: "30 20 * * *"     # s08 explainer  (21:30 Berlin winter)
-    - cron: "0 13 * * *"      # s09 midday_movers  (14:00 Berlin winter)
-    - cron: "0 7 * * *"       # s10 crypto_morning  (08:00 Berlin winter)
+    - cron: "0 18 * * *"      # s01 crypto_update  (19:00 Zurich winter)
+    - cron: "15 21 * * *"     # s02 close_recap  (22:15 Zurich winter)
+    - cron: "30 16 * * *"     # s03 chart_of_the_day  (17:30 Zurich winter)
+    - cron: "45 14 * * *"     # s04 us_open  (15:45 Zurich winter)
+    - cron: "30 19 * * *"     # s05 quiz  (20:30 Zurich winter)
+    - cron: "0 12 * * *"      # s06 pre_market  (13:00 Zurich winter)
+    - cron: "0 11 * * *"      # s07 macro_calendar  (12:00 Zurich winter)
+    - cron: "30 20 * * *"     # s08 explainer  (21:30 Zurich winter)
+    - cron: "0 13 * * *"      # s09 midday_movers  (14:00 Zurich winter)
+    - cron: "0 7 * * *"       # s10 crypto_morning  (08:00 Zurich winter)
   workflow_dispatch:
     inputs:
       format: {description: "format (empty = --auto)", required: false, default: ""}
@@ -29,7 +32,7 @@ jobs:
     # (Settings -> Secrets and variables -> Actions -> Variables). Manual runs default to dry_run=true.
     if: github.event_name == 'workflow_dispatch' || vars.FINSHORTS_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45     # approval wait (25 min) + ~3 min build
+    timeout-minutes: 45     # approval wait (25 min, only if Telegram is configured) + ~4 min build
     env:
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
       CHANNEL_HANDLE: ${{ vars.CHANNEL_HANDLE }}
@@ -57,31 +60,78 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.11", cache: pip}
+      - name: slot due?
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then echo "due=true" >> "$GITHUB_OUTPUT"; echo "manual run"; exit 0; fi
+          pip install -q "PyYAML>=6.0"
+          python scripts/slot_due.py
       - name: system packages
+        if: steps.gate.outputs.due == 'true'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg espeak-ng
-      - name: model cache (Kokoro weights, whisper)
+      - name: model cache (Kokoro weights, faster-whisper, rembg u2netp)
+        if: steps.gate.outputs.due == 'true'
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/huggingface
-            ~/.rembg
-          key: hf-kokoro-rembg-v2
+            ~/.u2net
+          key: models-kokoro-whisper-u2net-v3
+          restore-keys: |
+            hf-kokoro-rembg-v2
       - name: install
+        if: steps.gate.outputs.due == 'true'
         run: |
           pip install --extra-index-url https://download.pytorch.org/whl/cpu torch==2.6.0+cpu
           pip install -r requirements.txt
+      - name: warm rembg model (u2netp, cached)
+        if: steps.gate.outputs.due == 'true'
+        run: python -c "from rembg import new_session; new_session('u2netp')" || echo "rembg warm-up failed (portraits fall back to framed photo)"
       - name: run
+        id: run
+        if: steps.gate.outputs.due == 'true'
+        timeout-minutes: 35
+        env:
+          IN_FORMAT: ${{ github.event.inputs.format }}
+          IN_DRY: ${{ github.event.inputs.dry_run }}
+          GATE_SLOT: ${{ steps.gate.outputs.slot }}
         run: |
-          if [ -n "${{ github.event.inputs.format }}" ]; then ARGS="--format ${{ github.event.inputs.format }}"; else ARGS="--auto"; fi
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          # scheduled: use the slot the gate found (install takes ~2 min, the 40-min window could close meanwhile)
+          if [ -n "$IN_FORMAT" ]; then ARGS="--format $IN_FORMAT"; elif [ -n "$GATE_SLOT" ]; then ARGS="--slot $GATE_SLOT"; else ARGS="--auto"; fi
+          if [ "$IN_DRY" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          echo "python run.py $ARGS"
           python run.py $ARGS
+          for f in out/*/run_log.json; do
+            [ -f "$f" ] || continue
+            python - "$f" <<'PY'
+          import json, sys
+          l = json.load(open(sys.argv[1]))
+          print(f"::notice title=finshorts {l['job_id']}::LLM={l.get('script_provider')} video={l.get('probed_duration')}s "
+                f"tts={l.get('tts_seconds')}s render={l.get('render_seconds')}s total={l.get('total_seconds')}s "
+                f"youtube={l.get('youtube', 'dry-run')}")
+          PY
+          done
       - name: persist dedupe log
-        if: always()
+        # state/upload_log.json (uploads + used stories) is committed back so the same story / slot is never posted twice
+        if: always() && steps.gate.outputs.due == 'true'
         run: |
           git config user.name "finshorts-bot"; git config user.email "finshorts-bot@users.noreply.github.com"
           git add state/ assets/people/ || true   # per-person portrait cache incl. license meta.json
-          git diff --cached --quiet || (git commit -m "state: upload log [skip ci]" && git pull --rebase && git push)
+          if ! git diff --cached --quiet; then
+            git commit -m "state: upload log [skip ci]"
+            for i in 1 2 3; do git pull --rebase && git push && break; sleep 5; done
+          fi
       - name: keep video as artifact (3 days)
-        if: always()
+        if: always() && steps.gate.outputs.due == 'true'
         uses: actions/upload-artifact@v4
-        with: {name: out, path: "out/**/*.mp4", retention-days: 3, if-no-files-found: ignore}
+        with:
+          name: finshorts-video-${{ github.run_id }}
+          path: |
+            out/**/*.mp4
+            out/**/run_log.json
+            out/**/script.txt
+            out/**/metadata.json
+          retention-days: 3
+          if-no-files-found: ignore
