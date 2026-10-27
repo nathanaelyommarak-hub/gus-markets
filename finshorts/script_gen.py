@@ -1,5 +1,5 @@
 """Script generation. Numbers ONLY via placeholders filled from API facts; LLM text is validated."""
-import re, json, random, hashlib, datetime as dt
+import re, json, random, hashlib, time, datetime as dt
 import requests
 from .config import env
 from .market import session_state, asof_words
@@ -331,6 +331,13 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
                 raise RuntimeError("template freshness bug: " + fwhy)
             log.append(f"template: {why}")
             return parts, "template", log
+        need_key = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}.get(prov)
+        if need_key and not env(need_key):
+            log.append(f"{prov}: skipped (no {need_key})")
+            continue
+        if prov == "ollama" and not env("OLLAMA_HOST") and env("CI") == "true":
+            log.append("ollama: skipped (CI, no OLLAMA_HOST)")
+            continue
         fn = {"groq": llm_groq, "gemini": llm_gemini, "ollama": llm_ollama}[prov]
         for attempt in range(cfg["llm"]["max_retries"] + 1):
             try:
@@ -346,8 +353,12 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
                 if ok:
                     return parts, prov, log
             except Exception as e:
-                log.append(f"{prov}#{attempt}: {type(e).__name__}: {str(e)[:120]}")
-                break
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                log.append(f"{prov}#{attempt}: {type(e).__name__}: {str(e)[:120]}".replace(env("GEMINI_API_KEY") or "\0", "***"))
+                transient = code in (429, 500, 502, 503, 504) or isinstance(e, (requests.Timeout, requests.ConnectionError))
+                if not transient:
+                    break
+                time.sleep(min(30, 5 * (attempt + 1)))   # rate limit / overload -> back off and retry same provider
     raise RuntimeError("no script")
 
 
