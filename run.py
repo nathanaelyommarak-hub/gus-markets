@@ -288,6 +288,9 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
                     from finshorts.upload_youtube import upload as yt_up
                     vid, priv = yt_up(out_mp4, meta["youtube"], cfg["upload"]["youtube"])
                     dedupe.record_upload("youtube", vh, job_id, vid); log["youtube"] = {"id": vid, "privacy": priv}
+                    if priv and priv != cfg["upload"]["youtube"].get("privacy", "public"):
+                        print(f"::warning title=YouTube privacy::uploaded as '{priv}' instead of "
+                              f"'{cfg['upload']['youtube'].get('privacy')}' - unverified API project? (see docs/YOUTUBE_AUDIT.md)")
                     if story: dedupe.record_story(story)   # immediately, so a later crash can't cause a re-post
             if cfg["upload"]["instagram"]["enabled"]:
                 if dedupe.already_uploaded("instagram", vh, job_id):

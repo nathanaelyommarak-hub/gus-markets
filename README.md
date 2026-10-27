@@ -14,7 +14,7 @@ Kanalname = Variable `CHANNEL_NAME` (GitHub → Settings → Variables).
 
 ## Dateien
 ```
-config/config.yaml      Kanal, Slots (10 Formate), Ramp 3→10/Tag, Feeds, LLM, TTS, Upload
+config/config.yaml      Kanal, Slots (10 Formate), Launch-Phasen (3/Tag ab 28.10., 10/Tag ab 11.11.2026), Feeds, LLM, TTS, Upload
 run.py                  CLI: --auto | --slot s03 | --format quiz, --dry-run, --no-llm
 finshorts/              market, news, script_gen, tts, gus, chart, music, render,
                         metadata, dedupe, telegram_approval, upload_youtube,
