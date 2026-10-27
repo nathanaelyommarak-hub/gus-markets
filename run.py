@@ -5,9 +5,9 @@
   python run.py --auto                                 # pick the slot due now (cron), render, approve, upload
   python run.py --slot s03                             # a specific slot
 """
-import argparse, json, re, sys, time, hashlib, datetime as dt, traceback
+import argparse, json, os, re, sys, time, hashlib, datetime as dt, traceback
 from pathlib import Path
-from finshorts.config import load_config, slot_for_now, videos_per_day, OUT
+from finshorts.config import load_config, slot_for_now, videos_per_day, effective_slot, OUT
 from finshorts import market, news, script_gen, tts, chart, render, metadata, dedupe, people, motion
 
 CHART_ROTATION = [("coin", "bitcoin", 30), ("index", "^GSPC", 60), ("coin", "ethereum", 30), ("fred", "DGS10", 180), ("index", "^IXIC", 60)]
@@ -136,7 +136,7 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
     if fmt.get("needs_story"):
         items, ferr = news.fetch_feeds(cfg)
         log["feed_errors"] = ferr; log["feed_items"] = len(items)
-        cands = [s for s in news.verified_stories(cfg, news_topics(fmt_name, fmt), items) if not dedupe.story_used_recently(s["id"])]
+        cands = [s for s in news.verified_stories(cfg, news_topics(fmt_name, fmt), items) if not dedupe.story_used_recently(s)]
         log["news_topics"] = news_topics(fmt_name, fmt)
         log["verified_stories"] = [{k: s[k] for k in ("headline", "sources", "n_owners")} for s in cands[:5]]
         story = cands[0] if cands else None
@@ -272,7 +272,10 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
     # ---- approval + upload ----
     if not dry_run:
         approved = True
-        if cfg["approval"]["telegram"]:
+        tg_ready = bool(os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID"))
+        if cfg["approval"]["telegram"] and not tg_ready:
+            log["approval"] = "skipped (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set) -> auto-publish"
+        if cfg["approval"]["telegram"] and tg_ready:
             from finshorts.telegram_approval import request_approval
             approved = request_approval(out_mp4, f"{meta['youtube']['title']}\n\n{spoken}", job_id,
                                         cfg["approval"]["timeout_minutes"], cfg["approval"]["on_timeout"])
@@ -285,6 +288,7 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
                     from finshorts.upload_youtube import upload as yt_up
                     vid, priv = yt_up(out_mp4, meta["youtube"], cfg["upload"]["youtube"])
                     dedupe.record_upload("youtube", vh, job_id, vid); log["youtube"] = {"id": vid, "privacy": priv}
+                    if story: dedupe.record_story(story)   # immediately, so a later crash can't cause a re-post
             if cfg["upload"]["instagram"]["enabled"]:
                 if dedupe.already_uploaded("instagram", vh, job_id):
                     log["instagram"] = "skipped (duplicate)"
@@ -294,7 +298,8 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
                     icfg["delete_after_publish"] = cfg["upload"]["hosting"]["delete_after_publish"]
                     mid = ig_up(out_mp4, meta["instagram"]["caption"], icfg)
                     dedupe.record_upload("instagram", vh, job_id, mid); log["instagram"] = {"id": mid}
-            if story: dedupe.record_story(story["id"])
+            if story and any(isinstance(log.get(p), dict) for p in ("youtube", "instagram")):
+                dedupe.record_story(story)
             from finshorts import community
             log["community"] = community.publish(cfg, meta, log)
     log["total_seconds"] = round(time.time() - t0, 1)
@@ -312,6 +317,11 @@ def main():
     cfg = load_config(a.config)
     if a.auto:
         s = slot_for_now(cfg)
+        if not s and a.dry_run:   # manual dry run without a format: render the top-priority slot's format as a test
+            s = effective_slot(cfg, cfg["schedule"]["slots"][0], dt.datetime.now(dt.timezone.utc).date()) or \
+                {**cfg["schedule"]["slots"][0], "format": "chart_of_the_day"}
+            s = {**s, "id": "dry"}
+            print(f"no slot due now -> dry-run test of format {s['format']}")
         if not s:
             print(f"no active slot now (videos/day today = {videos_per_day(cfg)})"); return 0
         fmt, sid = s["format"], s["id"]
@@ -320,7 +330,11 @@ def main():
         if not a.dry_run and plats and all(dedupe.already_uploaded(p, job_id=jid) for p in plats):
             print(f"slot {jid} already done"); return 0
     elif a.slot:
-        s = next(x for x in cfg["schedule"]["slots"] if x["id"] == a.slot); fmt, sid = s["format"], s["id"]
+        s = next(x for x in cfg["schedule"]["slots"] if x["id"] == a.slot)
+        s = effective_slot(cfg, s, dt.datetime.now(dt.timezone.utc).date())   # weekend overrides
+        if not s:
+            print(f"slot {a.slot} is skipped today (weekend override)"); return 0
+        fmt, sid = s["format"], s["id"]
     else:
         fmt, sid = a.format or "crypto_update", "manual"
     log = run(cfg, fmt, sid, dry_run=a.dry_run or bool(a.sample_story), no_llm=a.no_llm, sample=a.sample_story)
