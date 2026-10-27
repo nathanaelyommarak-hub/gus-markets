@@ -21,8 +21,16 @@ def load_config(path=None):
 
 
 def videos_per_day(cfg, today=None):
+    """Active slots today. `schedule.phases` ([{from: date, per_day: n}, ...]) wins; before the first phase -> 0.
+    Legacy linear ramp (start_date/start_per_day/target_per_day/ramp_days) is used only if no phases are set."""
     s = cfg["schedule"]
     today = today or dt.datetime.now(dt.timezone.utc).date()
+    if s.get("phases"):
+        n = 0
+        for p in sorted(s["phases"], key=lambda p: str(p["from"])):
+            if today >= dt.date.fromisoformat(str(p["from"])):
+                n = int(p["per_day"])
+        return max(0, min(n, len(s["slots"])))
     start = dt.date.fromisoformat(str(s["start_date"]))
     days = max(0, (today - start).days)
     n = s["start_per_day"] + (s["target_per_day"] - s["start_per_day"]) * days / max(1, s["ramp_days"])

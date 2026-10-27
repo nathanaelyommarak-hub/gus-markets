@@ -8,7 +8,7 @@ channel:
   catchphrase: "Already forgot the dip. Next."
   disclaimer: "Not financial advice. For entertainment and education only."
   timezone: "UTC"
-  audience_timezone: "Europe/Berlin"   # slot times below are UTC; Berlin = UTC+1 (winter) / UTC+2 (summer)
+  audience_timezone: "Europe/Zurich"   # slot times below are UTC; Zurich = UTC+1 (winter) / UTC+2 (summer)
 
 # ---------------- brand ----------------
 brand:
@@ -36,25 +36,26 @@ video:
   crf: 20
   preset: "veryfast"
 
-# ---------------- ramp-up ----------------
+# ---------------- schedule / launch phases ----------------
 schedule:
-  start_date: "2026-10-28"     # day 0 of the ramp
-  start_per_day: 3
-  target_per_day: 10
-  ramp_days: 14
-  # 10 slots (UTC; Berlin = +1 h in winter). Slot i is active when i < videos_per_day(today).
-  # Order = priority: the first 3 (all evening Berlin time) run from day 0. Min. 45 min between uploads.
+  # Slot i (in the order below) is active when i < per_day of the current phase. Before the first phase -> 0/day.
+  # Phase 1 (launch): s01-s03 only = 19:00, 22:15, 17:30 Europe/Zurich. Phase 2: all 10 slots.
+  phases:
+    - {from: "2026-10-28", per_day: 3}
+    - {from: "2026-11-11", per_day: 10}
+  # 10 slots, times in UTC (Zurich = UTC+1 in winter, UTC+2 from 2027-03-28 -> everything shifts +1 h local in summer).
+  # Order = priority. Min. 45 min between uploads.
   slots:
-    - {id: s01, utc: "18:00", format: crypto_update}      # 19:00 Berlin  Crypto Evening
-    - {id: s02, utc: "21:15", format: close_recap}        # 22:15 Berlin  after NYSE close (20:00/21:00 UTC)
-    - {id: s03, utc: "16:30", format: chart_of_the_day}   # 17:30 Berlin
-    - {id: s04, utc: "14:45", format: us_open}            # 15:45 Berlin  after the open in both DST phases
-    - {id: s05, utc: "19:30", format: quiz}               # 20:30 Berlin
-    - {id: s06, utc: "12:00", format: pre_market}         # 13:00 Berlin
-    - {id: s07, utc: "11:00", format: macro_calendar}     # 12:00 Berlin
-    - {id: s08, utc: "20:30", format: explainer}          # 21:30 Berlin
-    - {id: s09, utc: "13:00", format: midday_movers}      # 14:00 Berlin
-    - {id: s10, utc: "07:00", format: crypto_morning}     # 08:00 Berlin
+    - {id: s01, utc: "18:00", format: crypto_update}      # 19:00 Zurich  Crypto Evening
+    - {id: s02, utc: "21:15", format: close_recap}        # 22:15 Zurich  after NYSE close (20:00/21:00 UTC)
+    - {id: s03, utc: "16:30", format: chart_of_the_day}   # 17:30 Zurich
+    - {id: s04, utc: "14:45", format: us_open}            # 15:45 Zurich  after the open in both DST phases
+    - {id: s05, utc: "19:30", format: quiz}               # 20:30 Zurich
+    - {id: s06, utc: "12:00", format: pre_market}         # 13:00 Zurich
+    - {id: s07, utc: "11:00", format: macro_calendar}     # 12:00 Zurich
+    - {id: s08, utc: "20:30", format: explainer}          # 21:30 Zurich
+    - {id: s09, utc: "13:00", format: midday_movers}      # 14:00 Zurich
+    - {id: s10, utc: "07:00", format: crypto_morning}     # 08:00 Zurich
   # stock markets are closed on weekends -> swap or skip stock slots (Sat = 5, Sun = 6 by UTC weekday)
   weekend_overrides:
     sat: {close_recap: week_recap, us_open: myth_buster, pre_market: skip, macro_calendar: skip}
@@ -206,7 +207,7 @@ news:
 # ---------------- LLM ----------------
 llm:
   # tried in order; on any error / validation failure -> next; last resort = template
-  providers: [groq, gemini, ollama, template]
+  providers: [gemini, groq, ollama, template]   # providers without an API key are skipped (no GROQ key -> straight to Gemini)
   groq:   {model: "openai/gpt-oss-120b", base_url: "https://api.groq.com/openai/v1"}
   gemini: {model: "gemini-flash-lite-latest"}
   ollama: {model: "qwen2.5:3b", base_url: "http://localhost:11434"}
@@ -235,7 +236,7 @@ music:
 # ---------------- community (all off by default; see finshorts/community.py) ----------------
 community:
   telegram_poll: false          # post the video's poll question as a native Telegram poll (sendPoll)
-  telegram_poll_slot: s01       # ONE poll per day (19:00 Berlin video), not one per upload
+  telegram_poll_slot: s01       # ONE poll per day (19:00 Zurich video), not one per upload
   youtube_comment: false        # post the poll/pinned text as a comment (50 quota units; needs youtube.force-ssl); pin manually
   instagram_comment: false      # POST /{media-id}/comments (instagram_manage_comments); pin manually in the app
   poll_open_hours: 24
