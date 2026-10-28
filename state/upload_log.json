@@ -1,0 +1,59 @@
+{
+ "uploads": [
+  {
+   "platform": "youtube",
+   "hash": "ea7f921346182903e5e4e7b040b0523d523e9765b8d9f8f01949d60fa7f977c5",
+   "job_id": "20261028_s02_close_recap",
+   "remote_id": "_FktZEKGaVg",
+   "ts": 1793224263.202808
+  }
+ ],
+ "stories": [
+  {
+   "id": "84ddc3127170",
+   "headline": "Fed holds interest rates steady in last decision before midterms",
+   "tokens": [
+    [
+     "900",
+     "after",
+     "analyst",
+     "changed",
+     "fed",
+     "gold",
+     "holds",
+     "little",
+     "rates",
+     "sees",
+     "sliding",
+     "steady"
+    ],
+    [
+     "before",
+     "decision",
+     "fed",
+     "holds",
+     "interest",
+     "last",
+     "midterms",
+     "rates",
+     "steady"
+    ],
+    [
+     "before",
+     "days",
+     "even",
+     "fed",
+     "holds",
+     "hot",
+     "inflation",
+     "midterms",
+     "rates",
+     "runs",
+     "steady",
+     "the"
+    ]
+   ],
+   "ts": 1793224263.2030375
+  }
+ ]
+}
