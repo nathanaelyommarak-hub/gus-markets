@@ -64,3 +64,15 @@ def record_story(story):
                                       "tokens": toks[:6], "ts": time.time()})
     d["stories"] = d["stories"][-500:]
     LOG.write_text(json.dumps(d, indent=1))
+
+
+def last_upload_ts(platforms=None):
+    """Unix ts of the newest recorded upload (optionally only these platforms), or None."""
+    ts = [u.get("ts") or 0 for u in _load()["uploads"] if not platforms or u["platform"] in platforms]
+    return max(ts) if ts else None
+
+
+def slot_done(cfg, job_id):
+    """A slot counts as done once its job_id was uploaded to any enabled platform."""
+    plats = [p for p in ("youtube", "instagram") if cfg["upload"][p]["enabled"]]
+    return bool(plats) and any(already_uploaded(p, job_id=job_id) for p in plats)

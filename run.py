@@ -7,7 +7,7 @@
 """
 import argparse, json, os, re, sys, time, hashlib, datetime as dt, traceback
 from pathlib import Path
-from finshorts.config import load_config, slot_for_now, videos_per_day, effective_slot, OUT
+from finshorts.config import load_config, slot_for_now, videos_per_day, effective_slot, due_slot, slot_job_id, OUT
 from finshorts import market, news, script_gen, tts, chart, render, metadata, dedupe, people, motion
 
 CHART_ROTATION = [("coin", "bitcoin", 30), ("index", "^GSPC", 60), ("coin", "ethereum", 30), ("fred", "DGS10", 180), ("index", "^IXIC", 60)]
@@ -118,12 +118,12 @@ def sample_story(items, pattern, topics):
             "all_titles": [i["title"] for i in hit][:6]}
 
 
-def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None):
+def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None, slot_date=None):
     if sample:
         dry_run = True; slot_id = slot_id + "_sample"
     t0 = time.time()
     now = dt.datetime.now(dt.timezone.utc)
-    job_id = f"{now:%Y%m%d}_{slot_id}_{fmt_name}"
+    job_id = f"{(slot_date or now.date()):%Y%m%d}_{slot_id}_{fmt_name}"   # slot_date: catch-up after midnight keeps the slot's day
     jd = OUT / job_id; jd.mkdir(parents=True, exist_ok=True)
     log = {"job_id": job_id, "format": fmt_name, "started": now.isoformat()}
     fmt = cfg["formats"][fmt_name]
@@ -315,32 +315,37 @@ def main():
     ap.add_argument("--format"); ap.add_argument("--slot"); ap.add_argument("--auto", action="store_true")
     ap.add_argument("--dry-run", action="store_true"); ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--config")
+    ap.add_argument("--slot-date", help="UTC date (YYYY-MM-DD) the slot belongs to (catch-up after midnight)")
     ap.add_argument("--sample-story", help="TEST ONLY: regex of a feed headline to force as the story (forces --dry-run)")
     a = ap.parse_args()
     cfg = load_config(a.config)
+    sd = dt.date.fromisoformat(a.slot_date) if a.slot_date else dt.datetime.now(dt.timezone.utc).date()
     if a.auto:
-        s = slot_for_now(cfg)
-        if not s and a.dry_run:   # manual dry run without a format: render the top-priority slot's format as a test
-            s = effective_slot(cfg, cfg["schedule"]["slots"][0], dt.datetime.now(dt.timezone.utc).date()) or \
+        s, why = due_slot(cfg, is_uploaded=lambda j: dedupe.slot_done(cfg, j), last_upload_ts=dedupe.last_upload_ts())
+        print(why)
+        if s:
+            sd = dt.date.fromisoformat(s["day"])
+        elif a.dry_run:   # manual dry run without a format: render the top-priority slot's format as a test
+            s = effective_slot(cfg, cfg["schedule"]["slots"][0], sd) or \
                 {**cfg["schedule"]["slots"][0], "format": "chart_of_the_day"}
             s = {**s, "id": "dry"}
             print(f"no slot due now -> dry-run test of format {s['format']}")
         if not s:
-            print(f"no active slot now (videos/day today = {videos_per_day(cfg)})"); return 0
+            return 0
         fmt, sid = s["format"], s["id"]
-        jid = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d") + "_" + sid + "_" + fmt
-        plats = [p for p in ("youtube", "instagram") if cfg["upload"][p]["enabled"]]
-        if not a.dry_run and plats and all(dedupe.already_uploaded(p, job_id=jid) for p in plats):
-            print(f"slot {jid} already done"); return 0
     elif a.slot:
         s = next(x for x in cfg["schedule"]["slots"] if x["id"] == a.slot)
-        s = effective_slot(cfg, s, dt.datetime.now(dt.timezone.utc).date())   # weekend overrides
+        s = effective_slot(cfg, s, sd)   # weekend overrides (by the slot's own day)
         if not s:
-            print(f"slot {a.slot} is skipped today (weekend override)"); return 0
+            print(f"slot {a.slot} is skipped on {sd} (weekend override)"); return 0
         fmt, sid = s["format"], s["id"]
+        jid = slot_job_id(s, sd)
+        if not a.dry_run and dedupe.slot_done(cfg, jid):
+            print(f"slot {jid} already uploaded -> nothing to do"); return 0
     else:
         fmt, sid = a.format or "crypto_update", "manual"
-    log = run(cfg, fmt, sid, dry_run=a.dry_run or bool(a.sample_story), no_llm=a.no_llm, sample=a.sample_story)
+    log = run(cfg, fmt, sid, dry_run=a.dry_run or bool(a.sample_story), no_llm=a.no_llm, sample=a.sample_story,
+              slot_date=sd if sid not in ("manual", "dry") else None)
     print(json.dumps(log, indent=1, default=str))
     return 0
 

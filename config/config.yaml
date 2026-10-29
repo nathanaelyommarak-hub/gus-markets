@@ -43,6 +43,9 @@ schedule:
   phases:
     - {from: "2026-10-28", per_day: 3}
     - {from: "2026-11-11", per_day: 10}
+  # GitHub cron runs often start 30-60 min late or are dropped: any run posts the most recent missed active slot
+  # up to max_late_min after its time, at most one per run and not within min_gap_min of the last upload.
+  catch_up: {max_late_min: 180, min_gap_min: 30}
   # 10 slots, times in UTC (Zurich = UTC+1 in winter, UTC+2 from 2027-03-28 -> everything shifts +1 h local in summer).
   # Order = priority. Min. 45 min between uploads.
   slots:

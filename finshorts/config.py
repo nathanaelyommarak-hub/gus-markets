@@ -49,6 +49,49 @@ def slot_for_now(cfg, now=None, window_min=40):
     return None
 
 
+def slot_job_id(slot, day):
+    return f"{day:%Y%m%d}_{slot['id']}_{slot['format']}"
+
+
+def due_slot(cfg, now=None, is_uploaded=None, last_upload_ts=None):
+    """Catch-up scheduler. GitHub cron runs are often 30-60 min late or dropped entirely, so every run picks ANY
+    active slot whose time has passed within `schedule.catch_up.max_late_min` and whose job_id
+    ("YYYYMMDD_sNN_format", date = the slot's own UTC day, so a 21:15 slot caught after midnight keeps its day)
+    is not uploaded yet. At most one slot per run, and none if the last upload was less than
+    `catch_up.min_gap_min` ago (no flood after an outage). If several are missed, the most recently due slot
+    wins (freshest content); older ones follow in later runs while still within max_late_min.
+    is_uploaded(job_id) -> bool; last_upload_ts = unix ts of the newest upload (any platform) or None.
+    Returns (slot dict incl. day/job_id/late_min, or None; reason)."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    cu = cfg["schedule"].get("catch_up") or {}
+    max_late = float(cu.get("max_late_min", 180)) * 60
+    min_gap = float(cu.get("min_gap_min", 30)) * 60
+    cands, done = [], []
+    for day in (now.date() - dt.timedelta(days=1), now.date()):
+        for s in cfg["schedule"]["slots"][: videos_per_day(cfg, day)]:
+            h, m = map(int, s["utc"].split(":"))
+            t = dt.datetime(day.year, day.month, day.day, h, m, tzinfo=dt.timezone.utc)
+            late = (now - t).total_seconds()
+            if not (0 <= late <= max_late):
+                continue
+            es = effective_slot(cfg, s, day)
+            if not es:
+                continue
+            jid = slot_job_id(es, day)
+            if is_uploaded and is_uploaded(jid):
+                done.append(jid); continue
+            cands.append({**es, "day": day.isoformat(), "job_id": jid, "late_min": round(late / 60)})
+    if not cands:
+        return None, (f"no active slot pending at {now:%H:%M} UTC (videos/day today = {videos_per_day(cfg, now.date())}"
+                      + (f"; already uploaded: {', '.join(done)}" if done else "") + ")")
+    if last_upload_ts and now.timestamp() - last_upload_ts < min_gap:
+        ago = round((now.timestamp() - last_upload_ts) / 60)
+        return None, (f"pending {', '.join(c['job_id'] for c in cands)} but last upload was {ago} min ago "
+                      f"(< {min_gap / 60:.0f} min gap) -> next run")
+    c = min(cands, key=lambda c: c["late_min"])
+    return c, f"slot {c['id']} ({c['format']}) due, {c['late_min']} min after slot time [{c['job_id']}]"
+
+
 def effective_slot(cfg, slot, day):
     """Apply weekend overrides (stock markets closed). Returns None if the slot is skipped that day."""
     wk = {5: "sat", 6: "sun"}.get(day.weekday())

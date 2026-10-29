@@ -1,6 +1,7 @@
 name: finshorts
-# One cron per slot (UTC). GitHub may start scheduled jobs 5-30 min late; run.py --auto accepts a 40-min window
-# and only runs the slots active in the current launch phase (config/config.yaml schedule.phases):
+# One cron per slot (UTC) plus catch-up crons every 15 min in the evening. GitHub starts scheduled jobs 30-60 min
+# late or drops them; scripts/slot_due.py posts any missed active slot up to 180 min late (config schedule.catch_up),
+# one per run, min. 30 min after the last upload, and only the slots active in the current launch phase (config/config.yaml schedule.phases):
 #   from 2026-10-28: s01-s03 only (17:30 / 19:00 / 22:15 Europe/Zurich), from 2026-11-11: all 10 slots.
 # Inactive slots exit in the cheap "slot due?" step (~20 s) before any heavy install.
 # Times in comments = Europe/Zurich winter time (UTC+1); in summer time (from 2027-03-28) they are +1 h later locally.
@@ -16,6 +17,8 @@ on:
     - cron: "30 20 * * *"     # s08 explainer  (21:30 Zurich winter)
     - cron: "0 13 * * *"      # s09 midday_movers  (14:00 Zurich winter)
     - cron: "0 7 * * *"       # s10 crypto_morning  (08:00 Zurich winter)
+    - cron: "7,22,37,52 16-23 * * *"   # catch-up for late/dropped evening slot runs (cheap gate exits if nothing pending)
+    - cron: "7,22,37 0 * * *"          # catch-up for s02 (21:15 UTC) past midnight
   workflow_dispatch:
     inputs:
       format: {description: "format (empty = --auto)", required: false, default: ""}
@@ -58,6 +61,9 @@ jobs:
       HF_HUB_DISABLE_TELEMETRY: "1"
     steps:
       - uses: actions/checkout@v4
+      - name: latest state
+        # a queued run may have been checked out before the previous run committed state/upload_log.json
+        run: git pull --ff-only || true
       - uses: actions/setup-python@v5
         with: {python-version: "3.11", cache: pip}
       - name: slot due?
@@ -94,9 +100,10 @@ jobs:
           IN_FORMAT: ${{ github.event.inputs.format }}
           IN_DRY: ${{ github.event.inputs.dry_run }}
           GATE_SLOT: ${{ steps.gate.outputs.slot }}
+          GATE_DATE: ${{ steps.gate.outputs.slot_date }}
         run: |
-          # scheduled: use the slot the gate found (install takes ~2 min, the 40-min window could close meanwhile)
-          if [ -n "$IN_FORMAT" ]; then ARGS="--format $IN_FORMAT"; elif [ -n "$GATE_SLOT" ]; then ARGS="--slot $GATE_SLOT"; else ARGS="--auto"; fi
+          # scheduled: use the slot + slot date the gate found (install takes ~2 min; date matters for catch-up after midnight)
+          if [ -n "$IN_FORMAT" ]; then ARGS="--format $IN_FORMAT"; elif [ -n "$GATE_SLOT" ]; then ARGS="--slot $GATE_SLOT --slot-date $GATE_DATE"; else ARGS="--auto"; fi
           if [ "$IN_DRY" = "true" ]; then ARGS="$ARGS --dry-run"; fi
           echo "python run.py $ARGS"
           python run.py $ARGS
