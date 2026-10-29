@@ -13,6 +13,13 @@
    "job_id": "20261029_s03_chart_of_the_day",
    "remote_id": "zSPxLCF1PL8",
    "ts": 1793293233.9005647
+  },
+  {
+   "platform": "youtube",
+   "hash": "70c3856541dc7139bd6f9c1ac5569931055292adb50ec600c9e4fd671973cb98",
+   "job_id": "20261029_s01_crypto_update",
+   "remote_id": "L4B093QHQas",
+   "ts": 1793299838.9904184
   }
  ],
  "stories": [
@@ -61,6 +68,56 @@
     ]
    ],
    "ts": 1793224263.2030375
+  },
+  {
+   "id": "a16b79358b6b",
+   "headline": "Crypto exchange HTX exits the UK after settling with the FCA",
+   "tokens": [
+    [
+     "after",
+     "crypto",
+     "exchange",
+     "exits",
+     "fca",
+     "htx",
+     "settling",
+     "the",
+     "with"
+    ],
+    [
+     "agrees",
+     "crypto",
+     "exchange",
+     "fca",
+     "htx",
+     "leave",
+     "settlement",
+     "with"
+    ],
+    [
+     "agrees",
+     "financial",
+     "htx",
+     "justin",
+     "leave",
+     "settlement",
+     "sun",
+     "watchdog",
+     "with"
+    ],
+    [
+     "after",
+     "agrees",
+     "case",
+     "crypto",
+     "fca",
+     "halt",
+     "htx",
+     "promotions",
+     "unlawful"
+    ]
+   ],
+   "ts": 1793299838.9909112
   }
  ]
 }
