@@ -125,7 +125,8 @@ def _llm_relevant(cfg, stories):
     lines = "\n".join(f"{i}: {s['headline']}" for i, s in enumerate(stories))
     prompt = ("You filter news for a finance channel. For each numbered headline decide if it is PRIMARILY about financial "
               "markets, stocks, bonds, crypto markets or the crypto industry, the economy / macro policy, or a company's business. "
-              "Answer false for crime / violence / court cases about individuals (kidnapping, murder, sentencing of people), "
+              "Hacks, exploits, outages, lawsuits, regulation or enforcement involving exchanges, banks or companies ARE relevant "
+              "(they move markets). Answer false for violent crime / court cases about private individuals (kidnapping, murder, sentencing of people), "
               "celebrity, sports, weather, general politics without a market angle, even if money or crypto is mentioned.\n"
               f"{lines}\nReturn JSON: {{\"relevant\": [indexes of relevant headlines]}}")
     for m in (cfg.get("news", {}).get("relevance_models") or ["gemini-flash-latest", "gemini-flash-lite-latest"]):

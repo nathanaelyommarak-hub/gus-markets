@@ -375,7 +375,10 @@ def generate_long(cfg, facts, stories, mood, weekend, seed, recent_titles=(), al
                     parts["thumb"] = parts["thumb"].upper()
                     st_ = parts.pop("stories"); parts = SG.normalize(parts, facts)
                     parts["stories"] = [SG.normalize(x, facts) for x in st_]
-                    ok, why = validate_long(parts, facts, len(stories))
+                    try:
+                        ok, why = validate_long(parts, facts, len(stories))
+                    except KeyError as ke:          # unknown placeholder (e.g. gold data missing) -> retry with feedback
+                        ok, why = False, [f"unknown placeholder {{{ke.args[0]}}}: that data is not available today, do not use it"]
                     log.append(f"{model}#{attempt}: " + ("ok, fact-check passed" if ok else "; ".join(why)[:400]))
                     if ok:
                         return parts, model, log, list(range(len(stories)))
