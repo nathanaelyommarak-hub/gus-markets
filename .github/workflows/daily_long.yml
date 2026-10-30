@@ -122,5 +122,6 @@ jobs:
             out/*_long_*/script.txt
             out/*_long_*/metadata.json
             out/*_long_*/render_timing.json
+            out/*_long_*/snap.pkl
           retention-days: 3
           if-no-files-found: ignore

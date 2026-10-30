@@ -133,7 +133,7 @@ def build_visuals(snap, facts, now):
             pc = (b / a - 1) * 100; ptxt, pd = (mvtxt(SG.move(pc)), sgn(pc))
         charts[key] = {"name": chart_name or name, "period": f"{days}D" if days < 60 else f"{round(days / 30)}M", "value": value,
                        "move_txt": ptxt, "dir": pd, "pts": cp, "vfmt": vfmt, "source": src, "days": days,
-                       "move_label": f"{'30-day' if days <= 31 else f'{round(days / 30)}-month'} change"}
+                       "move_label": f"{f'{days}-day' if days <= 31 else f'{round(days / 30)}-month'} change"}
 
     for sym, key, nm, sh, rx in (("^GSPC", "spx", "S&P 500", "S&P", r"s&p|sp500"), ("^IXIC", "ndx", "Nasdaq", "NDX", r"nasdaq"),
                                  ("^DJI", "dow", "Dow Jones", "DOW", r"dow")):
@@ -147,11 +147,11 @@ def build_visuals(snap, facts, now):
     for cid, key, nm, sh, rx, fk in (("bitcoin", "btc", "Bitcoin", "BTC", r"bitcoins?|bitcoin's", "BTC"),
                                      ("ethereum", "eth", "Ether", "ETH", r"ether|ethereum|ether's", "ETH")):
         if cid in c and f"{fk}_PRICE" in facts:
-            h = snap.get("hist", {}).get(f"{cid}30") or []
+            hh = snap.get("hist", {}); h = hh.get(f"{cid}30") or hh.get(f"{cid}7") or []
             t = dt.datetime.fromisoformat(str(c[cid]["asof"]).replace("Z", "+00:00"))
             add(key, nm, sh, f"CoinGecko \u00B7 {t:%H:%M} UTC", facts[f"{fk}_PRICE"], f"{fk}_MOVE", c[cid]["chg_24h"], 5.0, "24 hours",
-                h, rx, "{:,.0f}" if c[cid]["price"] > 100 else "{:,.2f}", f"Source: CoinGecko \u00B7 as of {t:%b} {t.day}, {t:%H:%M} UTC", 30)
-            charts[key + "30"] = charts[key]
+                h, rx, "{:,.0f}" if c[cid]["price"] > 100 else "{:,.2f}", f"Source: CoinGecko \u00B7 as of {t:%b} {t.day}, {t:%H:%M} UTC", 30 if hh.get(f"{cid}30") else 7)
+            if key in charts: charts[key + "30"] = charts[key]
     g = snap.get("gold")
     if g and "GOLD_PRICE" in facts:
         add("gold", "Gold", "GOLD", close_lab(g["asof"]), facts["GOLD_PRICE"], "GOLD_MOVE", g["chg_1d"], 2.0, "1 day", g["points"][-90:],
@@ -284,6 +284,7 @@ def run(cfg, fmt_name, dry_run=True, no_llm=False, slot_date=None, snap_path=Non
         pickle.dump(snap, open(jd / "snap.pkl", "wb"))
     if snap.get("movers"): snap["movers"] = clean_movers(snap["movers"])
     log["data_errors"] = snap.get("errors", [])
+    for e in log["data_errors"]: print(f"::warning title=data::{str(e)[:200]}")
     facts, raw = build_long_facts(snap, cfg, now, weekend)
     ok, bad = verify_facts(facts, raw)
     if not ok: raise RuntimeError("fact-check: placeholder values disagree with the API numbers: " + "; ".join(bad))

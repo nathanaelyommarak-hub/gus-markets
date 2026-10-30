@@ -8,6 +8,7 @@
   Fed meeting federalreserve.gov FOMC calendar (official page, parsed; cached 12 h)
   BTC / ETH   CoinGecko 30-day and 7-day history
 """
+import time
 import copy, re, datetime as dt
 import requests
 from . import market
@@ -111,10 +112,13 @@ def snapshot_long(cfg):
     snap["hist"] = {}
     for cid in ("bitcoin", "ethereum"):
         for days in (30, 7):
-            try:
-                snap["hist"][f"{cid}{days}"] = market.coin_history(cfg, cid, days)
-            except Exception as e:
-                snap["errors"].append(f"{cid} {days}d: {e}")
+            for att in range(4):              # keyless CoinGecko rate-limits bursts (429) on shared CI IPs -> back off
+                try:
+                    snap["hist"][f"{cid}{days}"] = market.coin_history(cfg, cid, days)
+                    break
+                except Exception as e:
+                    if att == 3: snap["errors"].append(f"{cid} {days}d: {e}")
+                    else: time.sleep(15 * (att + 1))
     try:
         snap["fomc"] = next_fomc()
     except Exception as e:

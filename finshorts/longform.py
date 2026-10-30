@@ -1016,6 +1016,7 @@ def setup(job, cfg):
     # crypto
     cr = sec["crypto"]; CJ = job["crypto"]
     seg = [("btc", cr["t0"] - 0.2)] + crypto_marks(cr["words"], CJ)
+    seg = [(k if k not in ("btc", "eth") or k + "30" in job["charts"] else "mcap", tm) for k, tm in seg]   # missing history -> panel
     for j, (kind, tm) in enumerate(seg):
         t1 = seg[j + 1][1] if j + 1 < len(seg) else cr["t1"] + 0.3
         if kind in ("btc", "eth"):
