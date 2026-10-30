@@ -26,9 +26,11 @@ video:
   width: 2160
   height: 3840
   fps: 60                   # every frame rendered natively (no frame duplication / interpolation)
-  min_seconds: 25
-  max_seconds: 40            # target 25-40 s; TTS speed auto-adjusts (0.88-1.2) to fit
-  hard_max_seconds: 40.0     # HARD cap for the final file (voice + music tail), checked before and after render
+  min_seconds: 61            # main format (operator 2026-10-30): one story, one aha, 61-90 s, target 65-85 s
+  max_seconds: 90            # TTS speed auto-adjusts (0.88-1.2) to fit
+  hard_max_seconds: 90.0     # HARD cap for the final file (voice + music tail), checked before and after render
+  script_words: [135, 205]   # LLM script (hook+body+story+why+take+poll) ~ 63-88 s incl. CTA / sources / catchphrase
+  template_words: [110, 240] # fallback template (padded with number-free context lines)
   tail: 0.8                  # music tail after the last word (shrinks to 0.3 s if needed)
   min_speed: 0.88
   max_speed: 1.2
@@ -45,18 +47,20 @@ video:
 # ---------------- schedule / launch phases ----------------
 schedule:
   # Slot i (in the order below) is active when i < per_day of the current phase. Before the first phase -> 0/day.
-  # Quality over quantity (owner decision 2026-10-30): fixed at 3 premium 4K60 videos/day = s01-s03
+  # Quality over quantity (owner decision 2026-10-30): 3 premium 4K60 videos/day = s01-s03 until 2026-10-30, then 1/day (s01)
   # (19:00, 22:15, 17:30 Europe/Zurich). Slots s04-s10 stay defined but inactive. The former ramp to 10/day
   # from 2026-11-11 is disabled; re-enable by adding e.g. {from: "YYYY-MM-DD", per_day: 10}.
   phases:
     - {from: "2026-10-28", per_day: 3}
+    - {from: "2026-10-31", per_day: 1}   # operator 2026-10-30: max 2 new videos/day = 1 Short (s01) + 1 Daily Update
   # GitHub cron runs often start 30-60 min late or are dropped: any run posts the most recent missed active slot
   # up to max_late_min after its time, at most one per run and not within min_gap_min of the last upload.
   catch_up: {max_late_min: 180, min_gap_min: 30}
   # 10 slots, times in UTC (Zurich = UTC+1 in winter, UTC+2 from 2027-03-28 -> everything shifts +1 h local in summer).
   # Order = priority. Min. 45 min between uploads.
   slots:
-    - {id: s01, utc: "18:00", format: crypto_update}      # 19:00 Zurich  Crypto Evening
+    - {id: s01, utc: "18:00", format: crypto_update,      # 19:00 Zurich = 13:00 New York (US lunch, EU evening)
+       rotation: [gus_explains, gus_vs_myth, crypto_update, gus_explains, chart_of_the_day, gus_forgot_week, gus_vs_myth]}   # Mon..Sun (UTC)
     - {id: s02, utc: "21:15", format: close_recap}        # 22:15 Zurich  after NYSE close (20:00/21:00 UTC)
     - {id: s03, utc: "16:30", format: chart_of_the_day}   # 17:30 Zurich
     - {id: s04, utc: "14:45", format: us_open}            # 15:45 Zurich  after the open in both DST phases
@@ -157,6 +161,25 @@ formats:
     label: "TOP MOVERS"
     topic: [crypto]
     chart: {kind: movers}
+    needs_story: false
+  gus_explains:                       # test series 1: news explainer (one verified story, named actor, number, why it matters)
+    label: "GUS EXPLAINS"
+    kind: explains
+    topic: [crypto, stocks, macro]
+    chart: {kind: coin, id: bitcoin, days: 7}
+    needs_story: true
+    news_topics: [crypto, stocks, macro]
+  gus_vs_myth:                        # test series 2: evergreen counter-take with live data
+    label: "GUS VS. MYTH"
+    kind: myth
+    topic: [macro, crypto]
+    chart: {kind: fred, series: DGS10, days: 180}
+    needs_story: false
+  gus_forgot_week:                    # test series 3: Saturday ritual, week recap + A/B/C vote
+    label: "GUS FORGOT THE WEEK"
+    kind: week
+    topic: [crypto, stocks, macro]
+    chart: {kind: coin, id: bitcoin, days: 7}
     needs_story: false
   myth_buster:
     label: "MYTH BUSTER"
