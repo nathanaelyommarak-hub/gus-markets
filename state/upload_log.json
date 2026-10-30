@@ -34,6 +34,13 @@
    "job_id": "20261030_s03_chart_of_the_day",
    "remote_id": "pDeAgyfOxPo",
    "ts": 1793379259.9359295
+  },
+  {
+   "platform": "youtube",
+   "hash": "d376c7fa8bad0bf0cdbe2a87104bc34add6fbab244bccf82a7470de8b0a006cc",
+   "job_id": "20261030_s01_crypto_update",
+   "remote_id": "Ji13HjW_DM4",
+   "ts": 1793384538.3026228
   }
  ],
  "stories": [
@@ -132,6 +139,86 @@
     ]
    ],
    "ts": 1793299838.9909112
+  },
+  {
+   "id": "fc4f4902cbde",
+   "headline": "Binance hack could accelerate shift to DEXs: Standard Chartered",
+   "tokens": [
+    [
+     "34b",
+     "are",
+     "aside",
+     "assets",
+     "binance",
+     "ceo",
+     "cover",
+     "hack",
+     "losses",
+     "safe",
+     "says",
+     "sets",
+     "your"
+    ],
+    [
+     "billion",
+     "binance",
+     "cover",
+     "hack",
+     "has",
+     "losses",
+     "ready",
+     "says"
+    ],
+    [
+     "arranges",
+     "billion",
+     "binance",
+     "cover",
+     "crypto",
+     "from",
+     "hack",
+     "losses",
+     "record"
+    ],
+    [
+     "billion",
+     "binance",
+     "bitcoin",
+     "crypto",
+     "ether",
+     "hack",
+     "jump",
+     "liquidations",
+     "lower",
+     "sends"
+    ],
+    [
+     "and",
+     "bets",
+     "billion",
+     "bitcoin",
+     "crypto",
+     "ether",
+     "leveraged",
+     "out",
+     "selloff",
+     "wipes",
+     "xrp"
+    ],
+    [
+     "binance",
+     "bites",
+     "crypto",
+     "curbs",
+     "exchange",
+     "futures",
+     "hack",
+     "india",
+     "largest",
+     "trading"
+    ]
+   ],
+   "ts": 1793384538.3034728
   }
  ]
 }
