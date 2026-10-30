@@ -12,9 +12,10 @@ from .market import session_state, asof_words
 from .config import env
 
 SECTIONS = ("hook", "overview", "crypto", "watch", "take")
-WORD_RANGES = {"hook": (12, 34), "overview": (100, 215), "crypto": (70, 160), "watch": (45, 125), "take": (18, 65),
-               "story_text": (35, 95), "story_why": (15, 50)}
-TOTAL_RANGE = (520, 900)      # prompt asks 700-800; ~520 words + gaps/sting/outro already give >= 4:30 at ~125 wpm
+WORD_RANGES = {"hook": (12, 32), "overview": (95, 165), "crypto": (60, 115), "watch": (40, 80), "take": (22, 50),
+               "story_text": (35, 70), "story_why": (15, 38)}
+TOTAL_RANGE = (540, 640)      # prompt asks 560-620; CI calibration: Gemini prose ~0.59 s/word at speed 1.0 incl. gaps
+                              # -> 560-620 words = 4:50-5:30 at voice speed 1.00-1.08 (752 words gave 6:42 even at 1.12)
 COUNT_OK = re.compile(r"\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b(?![\s-]*(percent|%|thousand|million|billion|"
                       r"trillion|hundred|basis|points?|dollars?|bucks|cents?|x\b|times))", re.I)   # counting words ("three stories"), not data
 OUTRO = ("That's the Gus Markets Daily Update. Sources are in the description, and none of this is financial advice. "
@@ -149,22 +150,23 @@ HARD RULES
 3. Time words: stock, gold, oil, dollar and yield data have their own as-of placeholders (e.g. {OIL_ASOF_CLOSE}); use them
    when the data is not from today. TIME_RULE
 4. Output ONLY a JSON object with these keys:
- "hook": 18-30 words, the cold open (~10 seconds). First sentence max 9 words: the single most striking fact of the day,
+ "hook": 18-25 words, the cold open (~10 seconds). First sentence max 9 words: the single most striking fact of the day,
          as a punchy question or statement. Then tease what is coming (the stories, crypto, what to watch). No greeting.
- "overview": 150-195 words. Walk through, in this order: the S and P five hundred, the Nasdaq, the Dow, Bitcoin, Ether,
+ "overview": 115-140 words. Walk through, in this order: the S and P five hundred, the Nasdaq, the Dow, Bitcoin, Ether,
          gold, oil, the dollar and the ten-year yield, each with its placeholders; end with one line on the overall picture.
  "stories": array with exactly N_STORIES objects, same order as the STORIES given, each
-         {"kicker": "2-4 word label, Title Case, no numbers", "text": "55-80 words: what happened, who, neutral, attributed",
-          "why": "25-40 words: why it matters for markets or everyday investors, general mechanism only, no new facts"}
- "crypto": 100-140 words crypto deep dive: Bitcoin and Ether today and over the month, total crypto market value and
+         {"kicker": "2-4 word label, Title Case, no numbers", "text": "45-60 words: what happened, who, neutral, attributed",
+          "why": "20-30 words: why it matters for markets or everyday investors, general mechanism only, no new facts"}
+ "crypto": 75-95 words crypto deep dive: Bitcoin and Ether today and over the month, total crypto market value and
          Bitcoin dominance, the biggest large-cap gainer and loser.
- "watch": 70-100 words: what to watch next. Use the calendar placeholders if given and the next Fed meeting
+ "watch": 50-65 words: what to watch next. Use the calendar placeholders if given and the next Fed meeting
          ({FOMC_DATE}); the rate backdrop (ten-year, two-year, fed funds). Never invent events or dates.
- "take": 35-55 words. Starts with "My takeaway:". Gus's calm big-picture view, dry humor allowed, no advice.
+ "take": 30-40 words. Starts with "My takeaway:". Gus's calm big-picture view, dry humor allowed, no advice.
  "title": max 65 characters, specific and curiosity-driven, may use placeholders, no clickbait lies, no emojis, no hashtags.
  "thumb": 2-4 WORDS for the thumbnail, ALL CAPS, no numbers (e.g. "BITCOIN SLIPS AGAIN").
  "summary": one sentence (max 30 words) for the video description; placeholders allowed.
-Total spoken words (hook + overview + stories + crypto + watch + take) after filling: 690-800."""
+Total spoken words (hook + overview + stories + crypto + watch + take) after filling: 560-620 (about five minutes of voice; the video must stay between 4:30 and 5:30).
+Count carefully: longer answers are rejected."""
 
 WEEKEND_NOTE = """WEEKEND EDITION: US markets are closed. The "overview" is a WEEK IN REVIEW: use the weekly placeholders
 (*_MOVE_1W) for the S and P five hundred, the Nasdaq, the Dow and gold, with their as-of close placeholders, plus Bitcoin and
@@ -371,11 +373,18 @@ def generate_long(cfg, facts, stories, mood, weekend, seed, recent_titles=(), al
                     parts["stories"] = [{"kicker": str(s.get("kicker", "")).strip(), "text": str(s.get("text", "")).strip(),
                                          "why": str(s.get("why", "")).strip()} for s in (p.get("stories") or [])][:len(stories)]
                     parts["thumb"] = parts["thumb"].upper()
+                    st_ = parts.pop("stories"); parts = SG.normalize(parts, facts)
+                    parts["stories"] = [SG.normalize(x, facts) for x in st_]
                     ok, why = validate_long(parts, facts, len(stories))
                     log.append(f"{model}#{attempt}: " + ("ok, fact-check passed" if ok else "; ".join(why)[:400]))
                     if ok:
                         return parts, model, log, list(range(len(stories)))
                     fb = "\n\nYOUR PREVIOUS ANSWER WAS REJECTED. Fix exactly these problems and return the full JSON again:\n- " + "\n- ".join(why[:12])
+                    tot = sum(len(fill(t, facts).split()) for _, t in spoken_parts(parts))
+                    if tot > TOTAL_RANGE[1]:
+                        fb += f"\n- LENGTH: you wrote {tot} spoken words; the limit is 560-620. CUT about {tot - 590} words (shorten overview, crypto and story texts)."
+                    elif tot < TOTAL_RANGE[0]:
+                        fb += f"\n- LENGTH: you wrote {tot} spoken words; the target is 560-620. ADD about {590 - tot} words."
                 except Exception as e:
                     code = getattr(getattr(e, "response", None), "status_code", None)
                     log.append(f"{model}#{attempt}: {type(e).__name__} {code or ''} {str(e)[:100]}".replace(env("GEMINI_API_KEY") or "\0", "***"))

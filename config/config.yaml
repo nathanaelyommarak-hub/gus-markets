@@ -254,10 +254,10 @@ llm:
   # tried in order; on any error / validation failure -> next; last resort = template
   providers: [gemini, groq, ollama, template]   # providers without an API key are skipped (no GROQ key -> straight to Gemini)
   groq:   {model: "openai/gpt-oss-120b", base_url: "https://api.groq.com/openai/v1"}
-  gemini: {model: "gemini-flash-lite-latest"}
+  gemini: {model: "gemini-flash-latest"}   # full flash follows length / number rules far better than lite (CI 2026-10-30)
   ollama: {model: "qwen2.5:3b", base_url: "http://localhost:11434"}
   temperature: 0.8
-  max_retries: 2
+  max_retries: 3
 
 # ---------------- TTS ----------------
 tts:
@@ -322,8 +322,9 @@ long:                        # daily long-form landscape video (run_long.py / .g
   target_seconds: [270, 330] # 4:30 - 5:30; TTS speed adapts within 0.92 - 1.12
   tail: 4.0                  # outro music tail after the last word
   tts_speed: 1.0
+  tts_speed_max: 1.08         # natural voice; length is controlled by the 560-620 word script range
   gaps: {sting: 3.2, card: 1.6, why: 0.5, story: 1.0}
-  stories_max: 4             # up to 3 stocks/macro + 1 crypto (weekend: 2 + 2), each verified by 2+ independent owners
+  stories_max: 3             # up to 3 stocks/macro + 1 crypto (weekend: 2 + 2), each verified by 2+ independent owners
   story_dedupe_hours: 72
   llm_models: [gemini-flash-latest, gemini-flash-lite-latest]
   llm_retries: 4

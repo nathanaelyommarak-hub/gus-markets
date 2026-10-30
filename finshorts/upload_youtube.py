@@ -1,7 +1,12 @@
-"""YouTube Data API v3 upload (videos.insert, resumable). Shorts = vertical, <= 3 min (we stay <= 40 s); #Shorts goes in the description."""
+"""YouTube Data API v3 upload (videos.insert, resumable). Shorts = vertical, <= 3 min (we stay <= 90 s); #Shorts goes in the description."""
 from .config import env
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+# Full scope set of the current refresh token (youtube, youtube.upload, youtube.force-ssl, yt-analytics.readonly).
+# The refresh request must NOT down-scope the access token, otherwise captions.insert / thumbnails.set fail;
+# scopes=None lets Google issue an access token with every scope the refresh token was granted.
+SCOPES_FULL = ["https://www.googleapis.com/auth/youtube", "https://www.googleapis.com/auth/youtube.upload",
+               "https://www.googleapis.com/auth/youtube.force-ssl", "https://www.googleapis.com/auth/yt-analytics.readonly"]
+SCOPES = None
 
 
 def _service():
@@ -38,7 +43,7 @@ def _why(e):
 
 
 def set_thumbnail(video_id, jpg_path):
-    """thumbnails.set (works with the youtube.upload scope). Unverified channels get 403 -> returned as text, never raised."""
+    """thumbnails.set (youtube.upload / youtube scope). Unverified channels get 403 -> returned as text, never raised."""
     try:
         from googleapiclient.http import MediaFileUpload
         _service().thumbnails().set(videoId=video_id, media_body=MediaFileUpload(jpg_path, mimetype="image/jpeg")).execute()
@@ -62,5 +67,31 @@ def insert_caption(video_id, srt_path, lang="en", name="English"):
     except Exception as e:
         w = _why(e)
         if "insufficient" in w.lower() or "403" in w:
-            return ("not uploaded: the refresh token lacks the youtube.force-ssl scope (re-run scripts/youtube_auth.py with YT_WITH_COMMENTS=1) - " + w)
+            return ("not uploaded: the refresh token lacks the youtube.force-ssl scope (re-run scripts/youtube_auth.py and update the YT_REFRESH_TOKEN secret) - " + w)
         return "not uploaded: " + w
+
+
+def scope_check(video_id=None):
+    """Dry-run-safe, read-only: refresh the token, report granted scopes, captions.list on an existing video."""
+    import requests
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    creds = Credentials(None, refresh_token=env("YT_REFRESH_TOKEN", required=True),
+                        client_id=env("YT_CLIENT_ID", required=True), client_secret=env("YT_CLIENT_SECRET", required=True),
+                        token_uri="https://oauth2.googleapis.com/token", scopes=SCOPES)
+    creds.refresh(Request())
+    info = requests.get("https://oauth2.googleapis.com/tokeninfo", params={"access_token": creds.token}, timeout=30).json()
+    granted = sorted(info.get("scope", "").split())
+    out = {"granted": granted, "missing": [x for x in SCOPES_FULL if x not in granted]}
+    yt = build("youtube", "v3", credentials=creds, cache_discovery=False)
+    if not video_id:
+        ch = yt.channels().list(part="contentDetails", mine=True).execute()["items"][0]
+        up = ch["contentDetails"]["relatedPlaylists"]["uploads"]
+        video_id = yt.playlistItems().list(part="contentDetails", playlistId=up, maxResults=1).execute()["items"][0]["contentDetails"]["videoId"]
+    try:
+        caps = yt.captions().list(part="snippet", videoId=video_id).execute().get("items", [])
+        out["captions_list"] = f"ok ({len(caps)} track(s) on {video_id})"
+    except Exception as e:
+        out["captions_list"] = "FAILED " + _why(e)
+    return out

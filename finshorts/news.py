@@ -93,6 +93,68 @@ def topic_score(c, topics):
     return sum(len(toks & set(TOPIC_KW[t])) for t in topics)
 
 
+# ---------------- relevance: finance / markets / crypto / macro / companies only ----------------
+OFFTOPIC = re.compile(r"\b(kidnap\w*|abduct\w*|murder\w*|homicide|kill(ed|ing|s)?|shoot(ing|er)s?|stabb\w*|assault\w*|rape\w*|"
+                      r"tortur\w*|hostage\w*|ransom\w*|prison|jail\w*|sentenced|manslaughter|gunman|gunmen|"
+                      r"celebrity|actor|actress|singer|football|soccer|nba|nfl|olympic\w*|"
+                      r"weather|hurricane|earthquake|wildfire|obituary|dies|dead|death)\b", re.I)
+FIN_KW = set("""market markets stock stocks shares share equities index bond bonds yield yields treasury rate rates fed ecb boj
+central bank banks banking inflation cpi pce gdp jobs payrolls unemployment economy economic recession tariff tariffs trade
+dollar euro yen currency oil gold commodity commodities earnings revenue profit profits loss sales guidance forecast outlook
+ipo merger acquisition deal buyout dividend buyback valuation investor investors investment fund funds etf etfs hedge
+trading traders exchange exchanges listing regulator sec cftc fca regulation lawsuit settlement fine billion million
+bitcoin btc ether ethereum crypto cryptocurrency stablecoin token tokens blockchain defi dex miners mining coinbase binance
+nvidia apple tesla microsoft amazon meta alphabet google company companies ceo layoffs debt credit lending mortgage housing
+price prices s&p nasdaq dow wall street futures hack exploit liquidations""".split())
+
+
+def _keyword_relevant(s):
+    text = " ".join([s["headline"]] + s.get("all_titles", [])[:3])
+    if OFFTOPIC.search(s["headline"]):
+        return False
+    return len(_tokens(text) & FIN_KW) >= 2
+
+
+def _llm_relevant(cfg, stories):
+    """One Gemini call: which headlines are primarily finance / markets / crypto / macro / company-business news?
+    Returns a set of indexes, or None if the LLM is unavailable (keyword filter result is then used alone)."""
+    import json, os
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key or not stories:
+        return None
+    lines = "\n".join(f"{i}: {s['headline']}" for i, s in enumerate(stories))
+    prompt = ("You filter news for a finance channel. For each numbered headline decide if it is PRIMARILY about financial "
+              "markets, stocks, bonds, crypto markets or the crypto industry, the economy / macro policy, or a company's business. "
+              "Answer false for crime / violence / court cases about individuals (kidnapping, murder, sentencing of people), "
+              "celebrity, sports, weather, general politics without a market angle, even if money or crypto is mentioned.\n"
+              f"{lines}\nReturn JSON: {{\"relevant\": [indexes of relevant headlines]}}")
+    for m in (cfg.get("news", {}).get("relevance_models") or ["gemini-flash-latest", "gemini-flash-lite-latest"]):
+        try:
+            r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent", timeout=60,
+                              headers={"x-goog-api-key": key},
+                              json={"contents": [{"parts": [{"text": prompt}]}],
+                                    "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}})
+            r.raise_for_status()
+            j = json.loads(r.json()["candidates"][0]["content"]["parts"][0]["text"])
+            return {int(i) for i in j.get("relevant", [])}
+        except Exception:
+            time.sleep(3)
+    return None
+
+
+def relevant_stories(cfg, stories, log=None):
+    kw = [s for s in stories if _keyword_relevant(s)]
+    dropped = [s["headline"] for s in stories if s not in kw]
+    ok = _llm_relevant(cfg, kw[:12])
+    if ok is not None:
+        dropped += [s["headline"] for i, s in enumerate(kw[:12]) if i not in ok]
+        kw = [s for i, s in enumerate(kw[:12]) if i in ok]
+    if log is not None:
+        log.setdefault("relevance_dropped", []).extend(dropped)
+        log["relevance_llm"] = "gemini" if ok is not None else "keyword-only (LLM unavailable)"
+    return kw
+
+
 def verified_stories(cfg, topics, items=None):
     """Return stories covered by >= min_independent_sources different owners, best first."""
     if items is None:

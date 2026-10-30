@@ -70,8 +70,8 @@ def pick_stories(cfg, weekend, log):
     items, ferr = news.fetch_feeds(cfg)
     log["feed_errors"] = ferr; log["feed_items"] = len(items)
     fresh = lambda s: not dedupe.story_used_recently(s, hours=hrs, log=dedupe.LONG_LOG)
-    st = [s for s in news.verified_stories(cfg, ["stocks", "macro"], items) if fresh(s)]
-    cr = [s for s in news.verified_stories(cfg, ["crypto"], items) if fresh(s)]
+    st = news.relevant_stories(cfg, [s for s in news.verified_stories(cfg, ["stocks", "macro"], items) if fresh(s)], log)
+    cr = news.relevant_stories(cfg, [s for s in news.verified_stories(cfg, ["crypto"], items) if fresh(s)], log)
     n_cr = 2 if weekend else 1
     out = []
     for s in st[: nmax - min(n_cr, len(cr))] + cr[:n_cr]:          # dedupe across topics too
@@ -326,7 +326,7 @@ def run(cfg, fmt_name, dry_run=True, no_llm=False, slot_date=None, snap_path=Non
         total = vdur + float(lc.get("tail", 4.0))
         if lo <= total <= hi or attempt == 2: break
         sp = kk["speed"] * total / (hi - 8 if total > hi else lo + 8)
-        sp = max(0.92, min(1.12, sp))
+        sp = max(0.94, min(float(lc.get("tts_speed_max", 1.08)), sp))   # natural voice: <= 1.08 preferred
         if abs(sp - kk["speed"]) < 0.01: break
         kk["speed"] = round(sp, 3)
     log.update({"tts_seconds": round(time.time() - t1, 1), "tts_speed": kk["speed"], "voice_duration": round(vdur, 2)})

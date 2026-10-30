@@ -155,7 +155,8 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
     if fmt.get("needs_story"):
         items, ferr = news.fetch_feeds(cfg)
         log["feed_errors"] = ferr; log["feed_items"] = len(items)
-        cands = [s for s in news.verified_stories(cfg, news_topics(fmt_name, fmt), items) if not dedupe.story_used_recently(s)]
+        cands = news.relevant_stories(cfg, [s for s in news.verified_stories(cfg, news_topics(fmt_name, fmt), items)
+                                            if not dedupe.story_used_recently(s)], log)
         log["news_topics"] = news_topics(fmt_name, fmt)
         log["verified_stories"] = [{k: s[k] for k in ("headline", "sources", "n_owners")} for s in cands[:5]]
         story = cands[0] if cands else None

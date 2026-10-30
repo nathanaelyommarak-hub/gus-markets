@@ -100,6 +100,25 @@ def freshness_ok(parts, facts, kind):
     return True, "ok"
 
 
+COUNT_OK = re.compile(r"\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b(?![\s-]*(percent|%|thousand|million|billion|"
+                      r"trillion|hundred|basis|points?|dollars?|bucks|cents?|x\b|times))", re.I)   # counting words ("two reasons"), not data
+
+
+def normalize(parts, facts):
+    """LLM wrote a fetched value literally (e.g. "$76,600") -> swap in its placeholder instead of rejecting the script.
+    Only exact matches of verified fact strings are replaced; anything else with digits is still rejected."""
+    vals = sorted(((str(v), k) for k, v in facts.items() if not k.startswith("_") and isinstance(v, str)
+                   and re.search(r"\d", str(v)) and len(str(v)) >= 3), key=lambda x: -len(x[0]))
+    out = {}
+    for k, t in parts.items():
+        if isinstance(t, str) and re.search(r"\d", PH.sub("", t)):
+            for v, key in vals:
+                if v in t:
+                    t = re.sub(r"(?<![\w.,$])" + re.escape(v) + r"(?![\w%])", "{" + key + "}", t)
+        out[k] = t
+    return out
+
+
 def validate(parts, facts, min_w=48, max_w=92):
     """Reject anything with numbers not coming from placeholders. Word range excludes CTA/source line/catchphrase."""
     full = " ".join(parts.get(k, "") for k in ("hook", "body", "story", "why", "take", "poll"))
@@ -110,9 +129,9 @@ def validate(parts, facts, min_w=48, max_w=92):
         stripped = ALLOWED.sub("", PH.sub("", t))
         if re.search(r"\d", stripped):
             return False, f"digit outside placeholder in {k}: {stripped[:80]}"
-        m = re.search(NUM_WORDS, stripped, re.I) if k != "title" else None
+        m = re.search(NUM_WORDS, COUNT_OK.sub("", stripped), re.I) if k != "title" else None
         if m:
-            ctx = stripped[max(0, m.start() - 30): m.end() + 30].strip()
+            cs = COUNT_OK.sub("", stripped); ctx = cs[max(0, m.start() - 30): m.end() + 30].strip()
             return False, (f"number word '{m.group(0)}' outside placeholder in {k} (\"...{ctx}...\"): rephrase without any"
                            " number words (no one, single, first, half, dozen etc.) - only placeholders may carry numbers")
     words = len(fill(full, facts).split())
@@ -439,6 +458,7 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
                 parts = fn(cfg, SYSTEM, _user_prompt(fmt_name, fmt, facts, story, extra + fb))
                 parts = {k: str(parts.get(k, "")).strip() for k in ("hook", "body", "story", "why", "take", "poll", "title")}
                 if not story: parts["story"] = ""
+                parts = normalize(parts, facts)
                 ok, why = validate(parts, facts, *cfg["video"].get("script_words", (48, 92)))
                 if ok and parts["why"] and not parts["why"].lower().startswith("why it matters"):
                     ok, why = False, "why must start with 'Why it matters to you:'"
