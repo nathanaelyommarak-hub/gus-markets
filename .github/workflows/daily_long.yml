@@ -1,0 +1,126 @@
+name: daily-long
+# Gus Markets Daily Update: ~5 min 3840x2160 @ 60 fps landscape video, once a day (run_long.py).
+# Slot 21:45 UTC = 22:45 Zurich (winter; 23:45 in summer time), 30 min after the s02 Short (21:15 UTC).
+# Mon-Fri: daily_update. Sat: weekend_update (week in review + crypto). Sun: weekend_update (week ahead + crypto).
+# GitHub starts scheduled jobs late or drops them -> catch-up crons; scripts/long_due.py accepts up to 240 min late and
+# exits early (cheap) if the day's video is already in state/long_log.json -> never two uploads per day.
+on:
+  schedule:
+    - cron: "45 21 * * *"                 # slot (22:45 Zurich winter)
+    - cron: "15 22,23 * * *"              # catch-up
+    - cron: "15 0,1 * * *"                # catch-up past midnight UTC (belongs to the previous day)
+  workflow_dispatch:
+    inputs:
+      format: {description: "daily_update | weekend_update (empty = by weekday)", required: false, default: "daily_update"}
+      dry_run: {description: "dry run (render only, no upload)", type: boolean, default: true}
+
+permissions:
+  contents: write          # commit state/long_log.json
+
+concurrency: {group: finshorts-long, cancel-in-progress: false}   # own group: never blocks the Shorts workflow
+
+jobs:
+  make:
+    # same safety switch as the Shorts: scheduled runs do nothing until vars.FINSHORTS_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' || vars.FINSHORTS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
+      CHANNEL_HANDLE: ${{ vars.CHANNEL_HANDLE }}
+      COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: latest state
+        run: git pull --ff-only || true
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - name: due?
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          IN_FORMAT: ${{ github.event.inputs.format }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "due=true" >> "$GITHUB_OUTPUT"; echo "format=$IN_FORMAT" >> "$GITHUB_OUTPUT"; echo "slot_date=" >> "$GITHUB_OUTPUT"
+            echo "manual run"; exit 0
+          fi
+          pip install -q "PyYAML>=6.0"
+          python scripts/long_due.py
+      - name: system packages
+        if: steps.gate.outputs.due == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg espeak-ng
+      - name: model cache
+        if: steps.gate.outputs.due == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+            ~/.u2net
+          key: models-kokoro-whisper-u2net-v3
+      - name: install
+        if: steps.gate.outputs.due == 'true'
+        run: |
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu torch==2.6.0+cpu
+          pip install -r requirements.txt
+      - name: run
+        if: steps.gate.outputs.due == 'true'
+        timeout-minutes: 125
+        env:
+          IN_DRY: ${{ github.event.inputs.dry_run }}
+          G_FORMAT: ${{ steps.gate.outputs.format }}
+          G_DATE: ${{ steps.gate.outputs.slot_date }}
+        run: |
+          ARGS=""
+          if [ -n "$G_FORMAT" ]; then ARGS="--format $G_FORMAT"; fi
+          if [ -n "$G_DATE" ]; then ARGS="$ARGS --slot-date $G_DATE"; fi
+          if [ "$IN_DRY" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          echo "python run_long.py $ARGS"
+          python run_long.py $ARGS
+          for f in out/*_long_*/run_log.json; do
+            [ -f "$f" ] || continue
+            python - "$f" <<'PY'
+          import json, sys
+          l = json.load(open(sys.argv[1]))
+          print(f"::notice title=daily-long-{l['job_id']}::LLM={l.get('script_provider')} video={l.get('probed_duration')}s "
+                f"tts={l.get('tts_seconds')}s render={l.get('render_seconds')}s {l.get('render_timing', {})} total={l.get('total_seconds')}s "
+                f"youtube={l.get('youtube', 'dry-run')} thumbnail={l.get('thumbnail_set', '-')} captions={l.get('captions', '-')}")
+          PY
+          done
+          for v in out/*_long_*/*.mp4; do
+            [ -f "$v" ] || continue
+            echo "::notice title=video-spec::$(basename "$v") $(stat -c %s "$v") bytes | $(ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,profile,level,pix_fmt,color_primaries,bit_rate -of compact=p=0:nk=0 "$v")"
+            ffmpeg -nostats -hide_banner -i "$v" -vn -af loudnorm=print_format=summary -f null - 2>&1 | grep -E "Input Integrated|Input True Peak" | sed 's/^/::notice title=loudness::/'
+            ffmpeg -y -loglevel error -i "$v" -vf "scale=1920:1080:flags=lanczos,fps=30" -c:v libx264 -preset veryfast -crf 26 -c:a aac -b:a 128k -movflags +faststart "${v%.mp4}_preview_1080.mp4" || true
+          done
+      - name: persist long log
+        if: always() && steps.gate.outputs.due == 'true'
+        run: |
+          git config user.name "finshorts-bot"; git config user.email "finshorts-bot@users.noreply.github.com"
+          git add state/long_log.json assets/people/ 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "state: long log [skip ci]"
+            for i in 1 2 3 4 5; do git pull --rebase && git push && break; sleep 7; done
+          fi
+      - name: keep artifacts (3 days)
+        if: always() && steps.gate.outputs.due == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-long-${{ github.run_id }}
+          path: |
+            out/*_long_*/*_preview_1080.mp4
+            out/*_long_*/thumbnail.jpg
+            out/*_long_*/*.srt
+            out/*_long_*/run_log.json
+            out/*_long_*/script.txt
+            out/*_long_*/metadata.json
+            out/*_long_*/render_timing.json
+          retention-days: 3
+          if-no-files-found: ignore

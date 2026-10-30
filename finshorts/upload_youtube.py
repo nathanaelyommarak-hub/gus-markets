@@ -26,3 +26,41 @@ def upload(video_path, meta, ycfg):
     while resp is None:
         _, resp = req.next_chunk()
     return resp["id"], resp.get("status", {}).get("privacyStatus")
+
+
+def _why(e):
+    try:
+        import json as _j
+        err = _j.loads(e.content.decode())["error"]
+        return f"{err.get('code')} {(err.get('errors') or [{}])[0].get('reason', '')}: {err.get('message', '')[:160]}"
+    except Exception:
+        return f"{type(e).__name__}: {str(e)[:160]}"
+
+
+def set_thumbnail(video_id, jpg_path):
+    """thumbnails.set (works with the youtube.upload scope). Unverified channels get 403 -> returned as text, never raised."""
+    try:
+        from googleapiclient.http import MediaFileUpload
+        _service().thumbnails().set(videoId=video_id, media_body=MediaFileUpload(jpg_path, mimetype="image/jpeg")).execute()
+        return "ok"
+    except Exception as e:
+        w = _why(e)
+        if "403" in w or "forbidden" in w.lower():
+            return ("not set: channel not allowed to upload custom thumbnails (verify the channel by phone at "
+                    "youtube.com/verify) - " + w)
+        return "not set: " + w
+
+
+def insert_caption(video_id, srt_path, lang="en", name="English"):
+    """captions.insert needs the youtube.force-ssl scope; with an upload-only token this returns a message, never raises."""
+    try:
+        from googleapiclient.http import MediaFileUpload
+        _service().captions().insert(part="snippet", body={"snippet": {"videoId": video_id, "language": lang, "name": name,
+                                                                        "isDraft": False}},
+                                     media_body=MediaFileUpload(srt_path, mimetype="application/octet-stream")).execute()
+        return "ok"
+    except Exception as e:
+        w = _why(e)
+        if "insufficient" in w.lower() or "403" in w:
+            return ("not uploaded: the refresh token lacks the youtube.force-ssl scope (re-run scripts/youtube_auth.py with YT_WITH_COMMENTS=1) - " + w)
+        return "not uploaded: " + w

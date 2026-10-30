@@ -1,5 +1,5 @@
 """Market data from free APIs. Every number used in a script must come from here."""
-import os, csv, io, json, time, hashlib, datetime as dt
+import os, re, csv, io, json, time, hashlib, datetime as dt
 import requests
 from .config import CACHE, env
 
@@ -61,7 +61,9 @@ def top_movers(cfg, n=3):
                    "page": 1, "price_change_percentage": "24h"})
     rows = _cached("cg_top50", cfg["data"]["cache_minutes"], f)
     rows = [r for r in rows if r.get("price_change_percentage_24h") is not None
-            and r["symbol"].lower() not in ("usdt", "usdc", "dai", "usde", "fdusd", "usds", "pyusd", "steth", "wbtc", "weth", "wsteth", "weeth")]
+            and not (0.97 <= (r.get("current_price") or 0) <= 1.03 and abs(r["price_change_percentage_24h"]) < 1.0)   # stablecoin-like
+            and r["symbol"].lower() not in ("usdt", "usdc", "dai", "usde", "fdusd", "usds", "pyusd", "steth", "wbtc", "weth", "wsteth", "weeth")
+            and not re.search(r"\b(usd\w*|dollar|treasury|yield|t-?bill|buidl|ousg|usyc|usdg|wrapped|staked)\b", f"{r['name']} {r['symbol']}", re.I)]   # tokenized cash/T-bill funds
     rows.sort(key=lambda r: r["price_change_percentage_24h"])
     pick = lambda r: {"name": r["name"], "symbol": r["symbol"].upper(), "price": r["current_price"], "chg_24h": r["price_change_percentage_24h"]}
     return {"gainers": [pick(r) for r in rows[::-1][:n]], "losers": [pick(r) for r in rows[:n]], "source": "CoinGecko"}

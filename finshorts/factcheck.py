@@ -17,6 +17,10 @@ ALIASES = {
     "DOGE": r"doge|dogecoin", "SPX": r"s&p|s and p|stocks|wall street|index", "NDX": r"nasdaq|tech",
     "US10Y": r"ten[- ]year|treasury|yield|bond", "FED": r"fed|federal|rate", "CRYPTO": r"crypto|market|coins",
     "BTC_DOMINANCE": r"dominance|bitcoin|share",
+    # long-form daily update
+    "DOW": r"dow|industrials|blue[- ]chips?", "GOLD": r"gold|bullion", "OIL": r"oil|crude|barrel",
+    "USD": r"dollar|greenback|currency", "US2Y": r"two[- ]year|treasury|yield|bond|short[- ]term",
+    "FOMC": r"fed|fomc|federal reserve|meeting|rate decision|central bank",
 }
 UP_VERBS = r"rose|rises|rising|jump(?:ed|s)?|surg(?:ed|es)|soar(?:ed|s)|rall(?:ied|ies)|gain(?:ed|s)|climb(?:ed|s)|spik(?:ed|es)|higher|green|pump(?:ed|s)?"
 DOWN_VERBS = r"fell|falls|falling|drop(?:ped|s)?|sl(?:id|ides)|plung(?:ed|es)|s[au]nk|sinks|tumbl(?:ed|es)|crash(?:ed|es)|slump(?:ed|s)|lower|red|dump(?:ed|s)?"

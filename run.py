@@ -5,7 +5,7 @@
   python run.py --auto                                 # pick the slot due now (cron), render, approve, upload
   python run.py --slot s03                             # a specific slot
 """
-import argparse, json, os, re, sys, time, hashlib, datetime as dt, traceback
+import argparse, json, os, re, sys, time, hashlib, subprocess, datetime as dt, traceback
 from pathlib import Path
 from finshorts.config import load_config, slot_for_now, videos_per_day, effective_slot, due_slot, slot_job_id, OUT
 from finshorts import market, news, script_gen, tts, chart, render, metadata, dedupe, people, motion, factcheck
@@ -122,6 +122,19 @@ def sample_story(items, pattern, topics):
             "links": [i["link"] for i in hit][:5], "n_owners": len({i["owner"] for i in hit}), "topic_score": 0,
             "newest": max(i["ts"] for i in hit), "published": rep["ts"], "rep_source": rep["source"],
             "all_titles": [i["title"] for i in hit][:6]}
+
+
+def make_ig_derivative(src, dst, cfg):
+    """Instagram Reels deliverable: 1080x1920, 30 fps, H.264 High 4.1 yuv420p BT.709, AAC 48 kHz, +faststart (<= 90 s)."""
+    if int(cfg["video"].get("height", 1920)) <= 1920 and int(cfg["video"].get("fps", 30)) <= 30:
+        return src
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src,
+                    "-vf", "scale=1080:1920:flags=lanczos,fps=30,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv",
+                    "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-maxrate", "12M", "-bufsize", "24M",
+                    "-profile:v", "high", "-level:v", "4.1", "-pix_fmt", "yuv420p", "-g", "60",
+                    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+                    "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", dst], check=True)
+    return dst
 
 
 def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None, slot_date=None):
@@ -290,7 +303,6 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
         dur = render.render_video(job, out_mp4, cfg)
     log["renderer"] = renderer
     log["render_seconds"] = round(time.time() - t2, 1); log["video_duration"] = round(dur, 2)
-    import subprocess
     probed = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out_mp4],
                                   capture_output=True, text=True).stdout.strip() or 0)
     log["probed_duration"] = round(probed, 3)
@@ -300,6 +312,10 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
     (jd / "metadata.json").write_text(json.dumps(meta, indent=1))
     log["video"] = out_mp4
     vh = dedupe.file_hash(out_mp4); log["sha256"] = vh
+    ig_mp4 = None
+    if cfg["video"].get("ig_derivative") or cfg["upload"]["instagram"]["enabled"]:
+        ig_mp4 = make_ig_derivative(out_mp4, str(jd / f"{job_id}_ig1080.mp4"), cfg)
+        log["ig_derivative"] = ig_mp4
 
     # ---- approval + upload ----
     if not dry_run:
@@ -331,13 +347,7 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
                     from finshorts.upload_instagram import upload as ig_up
                     icfg = dict(cfg["upload"]["instagram"]); icfg["hosting_provider"] = cfg["upload"]["hosting"]["provider"]
                     icfg["delete_after_publish"] = cfg["upload"]["hosting"]["delete_after_publish"]
-                    ig_mp4 = out_mp4
-                    if int(cfg["video"].get("height", 1920)) > 1920:   # Reels spec: 1080x1920 -> high-quality downscale for IG only
-                        ig_mp4 = str(jd / f"{job_id}_ig1080.mp4")
-                        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", out_mp4, "-vf", "scale=1080:1920:flags=lanczos",
-                                        "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-r", "30", "-pix_fmt", "yuv420p",
-                                        "-c:a", "copy", "-movflags", "+faststart", ig_mp4], check=True)
-                    mid = ig_up(ig_mp4, meta["instagram"]["caption"], icfg)
+                    mid = ig_up(ig_mp4 or out_mp4, meta["instagram"]["caption"], icfg)
                     dedupe.record_upload("instagram", vh, job_id, mid); log["instagram"] = {"id": mid}
             if story and any(isinstance(log.get(p), dict) for p in ("youtube", "instagram")):
                 dedupe.record_story(story)

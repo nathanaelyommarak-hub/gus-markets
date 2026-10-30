@@ -35,6 +35,7 @@ video:
   comfortable_speed: 1.1     # trim optional lines before going faster than this
   est_words_per_sec: 2.3     # pre-TTS length estimate at speed 1.0 -> trims the script before synthesis
   crf: 17                   # H.264 High@5.2, yuv420p, BT.709 tagged; maxrate keeps peaks near YouTube's 4K60 SDR upload guide
+  ig_derivative: true       # also write <job>_ig1080.mp4 (1080x1920 30 fps Reels spec) - IG upload itself stays disabled
   preset: "medium"         # measured: 4K60 medium ~19 fps on 4 vCPU (veryfast ~40); ample headroom inside the 30 min budget
   maxrate: "60M"
   bufsize: "120M"
@@ -162,6 +163,18 @@ formats:
     topic: [crypto, stocks]
     chart: {kind: coin, id: bitcoin, days: 365}
     needs_story: false
+  daily_update:                       # ~5 min 4K60 landscape long-form (run_long.py, own workflow daily_long.yml)
+    label: "DAILY UPDATE"
+    topic: [stocks, crypto, macro]
+    chart: {kind: index, symbol: "^GSPC", days: 90}
+    needs_story: true
+    news_topics: [stocks, macro, crypto]
+  weekend_update:                     # Sat + Sun: week in review / week ahead + crypto
+    label: "WEEKEND UPDATE"
+    topic: [crypto, stocks, macro]
+    chart: {kind: coin, id: bitcoin, days: 30}
+    needs_story: true
+    news_topics: [crypto, stocks, macro]
   week_ahead:
     label: "WEEK AHEAD"
     topic: [macro, stocks]
@@ -279,3 +292,33 @@ motion:                      # motion-graphics scene layer (own designs; no publ
   sfx_db: -9
   people: true               # portraits only from Wikimedia Commons with PD / CC0 / CC BY / CC BY-SA
   cutout: true               # rembg (MIT, u2netp) background removal - not applied to CC BY-SA images
+
+long:                        # daily long-form landscape video (run_long.py / .github/workflows/daily_long.yml)
+  slot_utc: "21:45"          # 22:45 Zurich winter / 23:45 summer; 30 min after the s02 Short
+  catch_up_max_late_min: 240 # GitHub cron is often late or dropped -> catch-up crons until 01:45 UTC
+  target_seconds: [270, 330] # 4:30 - 5:30; TTS speed adapts within 0.92 - 1.12
+  tail: 4.0                  # outro music tail after the last word
+  tts_speed: 1.0
+  gaps: {sting: 3.2, card: 1.6, why: 0.5, story: 1.0}
+  stories_max: 4             # up to 3 stocks/macro + 1 crypto (weekend: 2 + 2), each verified by 2+ independent owners
+  story_dedupe_hours: 72
+  llm_models: [gemini-flash-latest, gemini-flash-lite-latest]
+  llm_retries: 3
+  music_db: -24              # self-synthesised bed under the voice (sidechain ducked); final mix loudnorm -14 LUFS
+  sfx_db: -12
+  video:
+    fps: 60
+    crf: 18
+    preset: veryfast
+    maxrate: "50M"
+    bufsize: "100M"
+    gb_per_worker: 2.2
+    audio_bitrate: "320k"
+    workers: 0
+  upload:
+    enabled: true
+    privacy: public
+    category_id: "25"          # News & Politics
+    contains_synthetic_media: true
+    notify_subscribers: true
+    captions: true             # captions.insert (needs youtube.force-ssl scope; skipped gracefully without it)

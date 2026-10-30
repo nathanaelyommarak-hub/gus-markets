@@ -689,7 +689,6 @@ def draw_person(S, t, tl, span):
         p2 = ph.resize((int(ph.width * z), int(ph.height * z)), Image.BILINEAR)
         box = Image.new("RGBA", (S["w"], S["h"]), (0, 0, 0, 0))
         box.alpha_composite(p2, (int(S["w"] / 2 - p2.width / 2), int(1220 - p2.height + (1 - k) * 80)))
-        if k < 1: box.putalpha(box.getchannel("A").point(lambda v, q=k: int(v * q)))
         box.putalpha(ImageChops.multiply(box.getchannel("A"), rmask(S["w"], S["h"], 56)))
         im.alpha_composite(box)
     kp = e_back((tl - 0.35) / 0.5, 1.2)
@@ -713,9 +712,7 @@ def poll_options(q):
 
 
 def build_poll(question):
-    w, h = STAGE_W, 1180
-    base = card(w, h, edge=(60, 90, 150))
-    d = ImageDraw.Draw(base)
+    w = STAGE_W
     chip = pill("YOUR CALL", font(F_MONT, 58), ORANGE, INK, padx=44, h=116)
     q = re.sub(r"^your call:\s*", "", question, flags=re.I)
     fq = font(F_MONT, 98)
@@ -740,7 +737,13 @@ def build_poll(question):
         bd.text((bw / 2 + ax, 115), lab, font=f, fill=INK, anchor="mm")
         btns.append(b)
     hint = text_img("REPLY WITH ONE WORD  \u2193", font(F_MONT, 50), MUTED, pad=4)
-    return {"base": base, "chip": chip, "q": qimgs, "btns": btns, "hint": hint, "w": w, "h": h, "lh": int(fq.size * 1.2)}
+    lh = int(fq.size * 1.2)
+    # card height follows the content (no empty band between a short question and the buttons)
+    btn_y = 260 + len(qimgs) * lh + 90 + 115
+    h = btn_y + 115 + 190
+    base = card(w, h, edge=(60, 90, 150))
+    return {"base": base, "chip": chip, "q": qimgs, "btns": btns, "hint": hint, "w": w, "h": h, "lh": lh,
+            "btn_y": btn_y, "hint_y": btn_y + 115 + 70}
 
 
 def draw_poll(S, t, tl):
@@ -762,10 +765,10 @@ def draw_poll(S, t, tl):
         s = kb * pulse
         bb = b.resize((max(1, int(b.width * s)), max(1, int(b.height * s))), Image.BILINEAR)
         cx = 80 + bw / 2 + j * (bw + 60)
-        im.alpha_composite(bb, (int(cx - bb.width / 2), int(S["h"] - 300 - bb.height / 2)))
+        im.alpha_composite(bb, (int(cx - bb.width / 2), int(S["btn_y"] - bb.height / 2)))
     if tl > 1.0:
         h2 = S["hint"].copy(); h2.putalpha(h2.getchannel("A").point(lambda v, a=e_out((tl - 1.0) / 0.4): int(v * a)))
-        im.alpha_composite(h2, (int(S["w"] / 2 - h2.width / 2), S["h"] - 120 + int(8 * math.sin(tl * 4))))
+        im.alpha_composite(h2, (int(S["w"] / 2 - h2.width / 2), S["hint_y"] + int(8 * math.sin(tl * 4))))
     return im
 
 
@@ -863,12 +866,15 @@ def burst(fr, t, s, cx, cy, col):
 # ---------------- frame ----------------
 def stage_draw(fr, t):
     c = CTX
-    for sc in c["scenes"]:
+    scs = c["scenes"]
+    for j, sc in enumerate(scs):
         t0, t1 = sc["t0"], sc["t1"]
-        if not (t0 - 0.02 <= t <= t1 + 0.34): continue
+        # back-to-back successor: hold the outgoing card fully opaque until the incoming one is opaque
+        hold = 0.2 if j + 1 < len(scs) and abs(scs[j + 1]["t0"] - t1) < 0.15 else 0.0
+        if not (t0 - 0.02 <= t <= t1 + 0.34 + hold): continue
         tl = t - t0
         kin = e_back(tl / 0.5, 1.25) if tl < 0.5 else 1.0
-        kout = e_in((t - t1) / 0.32) if t > t1 else 0.0
+        kout = e_in((t - t1 - hold) / 0.32) if t > t1 + hold else 0.0
         im = sc["draw"](t, tl)
         alpha = clamp(tl / 0.18) * (1 - kout)
         scale = (0.9 + 0.1 * kin) * (1 - 0.06 * kout)
@@ -1040,7 +1046,7 @@ def setup(job, cfg, dur):
                            "draw": lambda t, tl, S=P, sp=pe - sw: draw_person(S, t, tl, sp)})
     if poll:
         PL = build_poll(poll["text"])
-        scenes.append({"t0": poll["t0"] - 0.1, "t1": dur - 0.36, "cy": STAGE_Y + 640, "draw": lambda t, tl, S=PL: draw_poll(S, t, tl)})
+        scenes.append({"t0": poll["t0"] - 0.1, "t1": dur - 0.36, "cy": STAGE_Y + max(PL["h"] / 2, STAGE_H / 2 - 120), "draw": lambda t, tl, S=PL: draw_poll(S, t, tl)})
     c["scenes"] = scenes
     cuts = [0.0] + [s["t0"] for s in scenes[1:]] + ([c["take"][0]] if c["take"] else []) + [dur]
     c["cuts"] = sorted(set(round(x, 3) for x in cuts))
