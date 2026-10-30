@@ -12,9 +12,11 @@ from .market import session_state, asof_words
 from .config import env
 
 SECTIONS = ("hook", "overview", "crypto", "watch", "take")
-WORD_RANGES = {"hook": (14, 34), "overview": (120, 215), "crypto": (80, 160), "watch": (55, 125), "take": (25, 65),
-               "story_text": (40, 95), "story_why": (18, 50)}
-TOTAL_RANGE = (600, 880)
+WORD_RANGES = {"hook": (12, 34), "overview": (100, 215), "crypto": (70, 160), "watch": (45, 125), "take": (18, 65),
+               "story_text": (35, 95), "story_why": (15, 50)}
+TOTAL_RANGE = (520, 900)      # prompt asks 700-800; ~520 words + gaps/sting/outro already give >= 4:30 at ~125 wpm
+COUNT_OK = re.compile(r"\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b(?![\s-]*(percent|%|thousand|million|billion|"
+                      r"trillion|hundred|basis|points?|dollars?|bucks|cents?|x\b|times))", re.I)   # counting words ("three stories"), not data
 OUTRO = ("That's the Gus Markets Daily Update. Sources are in the description, and none of this is financial advice. "
          "If Gus saved you some time, subscribe, and I'll see you tomorrow.")
 OUTRO_WEEKEND = ("That's the Gus Markets Weekend Update. Sources are in the description, and none of this is financial advice. "
@@ -196,7 +198,7 @@ def _sys(facts, n, weekend):
 def _llm(cfg, model, sys, user):
     key = env("GEMINI_API_KEY")
     if not key: raise RuntimeError("no GEMINI_API_KEY")
-    r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent", timeout=120,
+    r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent", timeout=180,
                       headers={"x-goog-api-key": key},
                       json={"systemInstruction": {"parts": [{"text": sys}]}, "contents": [{"parts": [{"text": user}]}],
                             "generationConfig": {"temperature": 0.7, "responseMimeType": "application/json"}})
@@ -226,7 +228,11 @@ def validate_long(parts, facts, n_stories):
             if ph not in facts or ph.startswith("_"): bad.append(f"unknown placeholder {ph} in {k}")
         stripped = ALLOWED.sub("", PH.sub("", t))
         if re.search(r"\d", stripped): bad.append(f"digit outside placeholder in {k}: {stripped[:60]!r}")
-        if k not in ("title",) and re.search(NUM_WORDS, stripped, re.I): bad.append(f"number word outside placeholder in {k}")
+        m = re.search(NUM_WORDS, COUNT_OK.sub("", stripped), re.I) if k not in ("title",) else None
+        if m:
+            ctx = COUNT_OK.sub("", stripped); j = m.start()
+            bad.append(f"number word '{m.group(0)}' outside placeholder in {k} (\"...{ctx[max(0, j - 40):j + 30]}...\"): "
+                       "use a {PLACEHOLDER} or rephrase without the number")
     if PH.search(parts.get("thumb", "")) or PH.search("".join(s.get("kicker", "") for s in parts["stories"])):
         bad.append("thumb / kicker must not contain placeholders")
     for k, (lo, hi) in WORD_RANGES.items():

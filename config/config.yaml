@@ -303,7 +303,7 @@ long:                        # daily long-form landscape video (run_long.py / .g
   stories_max: 4             # up to 3 stocks/macro + 1 crypto (weekend: 2 + 2), each verified by 2+ independent owners
   story_dedupe_hours: 72
   llm_models: [gemini-flash-latest, gemini-flash-lite-latest]
-  llm_retries: 3
+  llm_retries: 4
   music_db: -24              # self-synthesised bed under the voice (sidechain ducked); final mix loudnorm -14 LUFS
   sfx_db: -12
   video:
