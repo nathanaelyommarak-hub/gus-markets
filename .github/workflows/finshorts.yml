@@ -2,7 +2,8 @@ name: finshorts
 # One cron per slot (UTC) plus catch-up crons every 15 min in the evening. GitHub starts scheduled jobs 30-60 min
 # late or drops them; scripts/slot_due.py posts any missed active slot up to 180 min late (config schedule.catch_up),
 # one per run, min. 30 min after the last upload, and only the slots active in the current launch phase (config/config.yaml schedule.phases):
-#   from 2026-10-28: s01-s03 only (17:30 / 19:00 / 22:15 Europe/Zurich), from 2026-11-11: all 10 slots.
+#   from 2026-10-28: s01-s03 only (17:30 / 19:00 / 22:15 Europe/Zurich) = 3 premium 4K60 videos/day.
+#   The former ramp to 10/day on 2026-11-11 is disabled; s04-s10 stay defined (crons below) but inactive.
 # Inactive slots exit in the cheap "slot due?" step (~20 s) before any heavy install.
 # Times in comments = Europe/Zurich winter time (UTC+1); in summer time (from 2027-03-28) they are +1 h later locally.
 on:
@@ -35,7 +36,7 @@ jobs:
     # (Settings -> Secrets and variables -> Actions -> Variables). Manual runs default to dry_run=true.
     if: github.event_name == 'workflow_dispatch' || vars.FINSHORTS_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45     # approval wait (25 min, only if Telegram is configured) + ~4 min build
+    timeout-minutes: 75     # approval wait (25 min, only if Telegram is configured) + ~10 min 4K60 build/upload + headroom
     env:
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
       CHANNEL_HANDLE: ${{ vars.CHANNEL_HANDLE }}
@@ -95,7 +96,7 @@ jobs:
       - name: run
         id: run
         if: steps.gate.outputs.due == 'true'
-        timeout-minutes: 35
+        timeout-minutes: 50   # 4K60 render ~4-6 min on 4 vCPU (measured), upload of ~60-90 MB; generous headroom
         env:
           IN_FORMAT: ${{ github.event.inputs.format }}
           IN_DRY: ${{ github.event.inputs.dry_run }}
@@ -113,9 +114,13 @@ jobs:
           import json, sys
           l = json.load(open(sys.argv[1]))
           print(f"::notice title=finshorts-{l['job_id']}::LLM={l.get('script_provider')} video={l.get('probed_duration')}s "
-                f"tts={l.get('tts_seconds')}s render={l.get('render_seconds')}s total={l.get('total_seconds')}s "
+                f"tts={l.get('tts_seconds')}s render={l.get('render_seconds')}s ({l.get('renderer')}, {l.get('render_timing', {})}) total={l.get('total_seconds')}s "
                 f"youtube={l.get('youtube', 'dry-run')}")
           PY
+          done
+          for v in out/*/*.mp4; do
+            [ -f "$v" ] || continue
+            echo "::notice title=video-spec::$(basename "$v") $(stat -c %s "$v") bytes | $(ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,profile,pix_fmt,color_primaries,bit_rate -of compact=p=0:nk=0 "$v")"
           done
       - name: persist dedupe log
         # state/upload_log.json (uploads + used stories) is committed back so the same story / slot is never posted twice

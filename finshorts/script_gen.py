@@ -3,6 +3,7 @@ import re, json, random, hashlib, time, datetime as dt
 import requests
 from .config import env
 from .market import session_state, asof_words
+from . import factcheck
 
 NUM_WORDS = r"\b(percent|percentage points?|thousand|million|billion|trillion|hundred|dozen|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b"
 PH = re.compile(r"\{([A-Z0-9_]+)\}")
@@ -112,24 +113,32 @@ def validate(parts, facts, min_w=48, max_w=92):
     words = len(fill(full, facts).split())
     if not (min_w <= words <= max_w):
         return False, f"word count {words} not in [{min_w},{max_w}]"
-    if len(parts["hook"].split()) > 12:
+    if len(parts["hook"].split()) > 10:
         return False, "hook too long (must land in first 2 s)"
     return True, "ok"
 
 
 # ---------------- LLM providers ----------------
-SYSTEM = """You write 25-40 second English scripts for "Gus Markets", a finance-news YouTube Short / Instagram Reel hosted
-by Gus, a deadpan, chubby orange goldfish in a navy necktie who lives in a fishbowl. Gus is openly a cartoon fish, never
-claims to be a human or a licensed expert. Voice: calm, dry newsreader with understated goldfish humor. Rules - follow ALL:
+SYSTEM = """You write 25-40 second English scripts for "Gus Markets", a premium finance-news YouTube Short hosted by Gus,
+a deadpan, chubby orange goldfish in a navy necktie who lives in a fishbowl (water rises on green days, he wears a
+snorkel on red days). Gus is openly a cartoon fish, never claims to be a human or a licensed expert. Voice: calm, dry
+newsreader with understated goldfish humor. Every word must earn its place. Rules - follow ALL:
 1. NEVER write any digit or number word. Any price, percentage, level or amount MUST be written ONLY as one of the
    provided {PLACEHOLDERS} exactly (e.g. "Bitcoin is {BTC_MOVE} at {BTC_PRICE}"). Use only placeholders from the list.
-2. Do not invent facts or causes. Only use the provided facts and the verified story. No predictions, no buy/sell
-   advice, no promotions, no links.
-3. hook: a QUESTION the viewer instantly cares about, max 9 words, ends with "?".
-4. body: the key numbers + why they matter, 22-38 words. Stock index levels are "as of" the given weekday close.
-5. story: if a VERIFIED STORY is given, one neutral sentence (max 22 words) paraphrasing it, no numbers; else "".
+   Put each placeholder in a sentence that NAMES its asset (never "{ETH_MOVE}" in a sentence about Solana).
+   Never put a direction verb that contradicts the value (no "jumped {BTC_MOVE}" when it is "down ..."): prefer
+   neutral verbs like "is", "sits at", "closed", "trades".
+2. Do not invent facts, causes or quotes. Only use the provided facts and the verified story. No predictions, no
+   buy/sell advice, no promotions, no links.
+3. hook: the strongest, most surprising angle of TODAY's data as a QUESTION, 5-8 words, must land within 1.5 seconds
+   when read aloud, ends with "?". Concrete beats vague ("Did Bitcoin just lose its floor?" not "What happened today?").
+4. body: deliver the payoff fast - the key numbers first, then one line on why it matters, 22-38 words. Short sentences.
+   Stock index levels are "as of" the given weekday close.
+5. story: if a VERIFIED STORY is given, one neutral sentence (max 22 words) accurately paraphrasing it in your own
+   words (who did what), no numbers, no added causes; else "".
 6. take: Gus's own short opinion/context, 8-16 words, deadpan, starts with "My take:". No catchphrase.
-7. poll: one short audience question answerable in one word in the comments (max 10 words, ends with "?").
+7. poll: one short audience question answerable in one word in the comments (max 10 words, ends with "?"), ideally
+   an either/or ("dip or drop?") that echoes the hook so the video loops back to its first line.
 8. title: max 60 characters, a curiosity question or clear statement, may use placeholders, no clickbait lies, no hashtags.
 Return ONLY JSON: {"hook": "...", "body": "...", "story": "...", "take": "...", "poll": "...", "title": "..."}"""
 
@@ -329,6 +338,9 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
             fok, fwhy = freshness_ok(parts, facts, kind)
             if not fok:
                 raise RuntimeError("template freshness bug: " + fwhy)
+            cok, cwhy = factcheck.check_script(parts, facts)
+            if not cok:
+                raise RuntimeError("template fact-check failed: " + "; ".join(cwhy))
             log.append(f"template: {why}")
             return parts, "template", log
         need_key = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}.get(prov)
@@ -349,6 +361,9 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
                     ok, why = False, "hook must be a question"
                 if ok:
                     ok, why = freshness_ok(parts, facts, kind)
+                if ok:      # every number / attribution / direction must match the fetched data, else regenerate
+                    ok, reasons = factcheck.check_script(parts, facts)
+                    why = "ok, fact-check passed" if ok else "fact-check: " + "; ".join(reasons)[:300]
                 log.append(f"{prov}#{attempt}: {why}")
                 if ok:
                     return parts, prov, log

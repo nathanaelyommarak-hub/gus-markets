@@ -8,7 +8,7 @@
 import argparse, json, os, re, sys, time, hashlib, datetime as dt, traceback
 from pathlib import Path
 from finshorts.config import load_config, slot_for_now, videos_per_day, effective_slot, due_slot, slot_job_id, OUT
-from finshorts import market, news, script_gen, tts, chart, render, metadata, dedupe, people, motion
+from finshorts import market, news, script_gen, tts, chart, render, metadata, dedupe, people, motion, factcheck
 
 CHART_ROTATION = [("coin", "bitcoin", 30), ("index", "^GSPC", 60), ("coin", "ethereum", 30), ("fred", "DGS10", 180), ("index", "^IXIC", 60)]
 
@@ -26,7 +26,13 @@ def pick_chart(cfg, fmt_name, snap, today):
         return pts, name, "{:,.0f}" if pts[-1][1] > 100 else "{:,.2f}", "CoinGecko", c["days"]
     if c["kind"] == "index":
         ih = market.index_history(cfg, c["symbol"], c["days"])
-        return ih["points"], ih["name"], "{:,.0f}", ih["source"], c["days"]
+        si = snap.get("indices", {}).get(c["symbol"])
+        pts = ih["points"]
+        if si:   # snapshot values win on overlapping dates -> chart, ticker, badge and voice show the SAME level
+            cut = min(p[0] for p in pts)
+            merged = dict(pts); merged.update({d: v for d, v in si["points"] if d >= cut})
+            pts = sorted(merged.items())
+        return pts, ih["name"], "{:,.0f}", (si or ih)["source"], c["days"]
     pts = market.fred_series(cfg, c["series"], c["days"])
     return pts, cfg["data"]["fred_series"].get(c["series"], c["series"]), "{:.2f}%", "FRED", c["days"]
 
@@ -157,6 +163,9 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
                                  else market.asof_words(dt.date.fromisoformat(_last[:10]), market.session_state(now)["ny_date"])),
                   "CHART_LAST": (vfmt.format(pts[-1][1]) if "%" in vfmt else script_gen.money(spot["price"] if spot else pts[-1][1]) if csrc == "CoinGecko" else f"{pts[-1][1]:,.0f}"),
                   "CHART_MOVE": (f"{'up' if pts[-1][1] > pts[0][1] else 'down'} {abs(pts[-1][1]-pts[0][1])*100:.0f} basis points" if "%" in vfmt else script_gen.move(chg))})
+    fc_bad = factcheck.facts_vs_snapshot(facts, snap, fmt_name, cfg)
+    if fc_bad:
+        raise RuntimeError("fact-check: placeholder facts disagree with the fetched snapshot: " + "; ".join(fc_bad))
     parts, provider, glog = script_gen.generate(cfg, fmt_name, facts, story, mood, seed=job_id)
     spoken, title, segs = script_gen.assemble(parts, facts, cfg["channel"]["catchphrase"], story)
     log.update({"script_provider": provider, "script_log": glog, "mood": mood, "mood_value": mv, "story": story and
@@ -226,7 +235,7 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
     sources = sorted({"CoinGecko"} | {i["source"] for i in ix.values()} | ({"FRED"} if fr else set()) | {csrc})
     # ---- motion-graphics data: asset badges, news card, person portrait (commercial-safe licenses only) ----
     assets = badge_assets(cfg, snap, spoken)
-    person_card, person_name, credits = None, "", []
+    person_card, person_name, credits, person = None, "", [], None
     if story and cfg.get("motion", {}).get("people", True):
         plog = []
         try:
@@ -236,6 +245,8 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
                 por = people.portrait(pp, cutout=cfg.get("motion", {}).get("cutout", True), log=plog)
                 person_card = motion.person_card(por, pp["name"], pp.get("desc", ""),
                                                  f"Photo: {por['meta']['artist'][:40]} · {por['meta']['license']} · Wikimedia Commons" if por else "")
+                person = {"por": por, "name": pp["name"], "desc": pp.get("desc", ""),
+                          "attr": f"Photo: {por['meta']['artist'][:48]} \u00B7 {por['meta']['license']} \u00B7 Wikimedia Commons" if por else ""}
                 if por:
                     credits.append(por["meta"]["attribution"])
                 log["person"] = {"name": pp["name"], "image": por and {k: por["meta"].get(k) for k in
@@ -245,8 +256,7 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
         if plog: log["people_log"] = plog
     kind = script_gen.kind_of(fmt_name, fmt)
     out_mp4 = str(jd / f"{job_id}.mp4")
-    t2 = time.time()
-    dur = render.render_video({"words": words, "voice_wav": voice, "mood": mood, "level": level, "label": fmt["label"],
+    job = {"words": words, "voice_wav": voice, "mood": mood, "level": level, "label": fmt["label"],
                                "channel": cfg["channel"]["name"], "date_str": now.strftime("%b %d, %Y"),
                                "chart_png": str(jd / "chart.png"), "ticker": ticker, "seed": int(hashlib.md5(job_id.encode()).hexdigest()[:6], 16),
                                "handle": cfg["channel"]["handle"], "timeline": timeline, "tail": tail,
@@ -255,8 +265,30 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
                                "big_value": facts["CHART_LAST"], "big_sub": sub, "big_label": f"{cname.upper()} · {asof}",
                                "big_dir": ((chg > 0.05) - (chg < -0.05)) if "%" not in vfmt else (pts[-1][1] > pts[0][1]) - (pts[-1][1] < pts[0][1]),
                                "proof": story and {"headline": story["headline"], "sources": story["sources"][:3]},
-                               "source_line": f"{cfg['channel']['disclaimer']} · Data: {', '.join(sorted({s.split(' (')[0] for s in sources}))}"},
-                              out_mp4, cfg)
+                               "source_line": f"{cfg['channel']['disclaimer']} · Data: {', '.join(sorted({p.strip() for s in sources for p in s.split(' (')[0].split(' + ')}))}"}
+    fok, fbad = factcheck.check_onscreen(job, facts)
+    log["fact_check"] = "passed (script numbers, attribution, direction, on-screen values)" if fok else fbad
+    if not fok:
+        raise RuntimeError("fact-check: on-screen values disagree with the script facts: " + "; ".join(fbad))
+    chart_dir = (pts[-1][1] > pts[0][1]) - (pts[-1][1] < pts[0][1])
+    job.update({"chart": {"pts": pts, "name": cname, "vfmt": vfmt, "days": cdays, "dir": job["big_dir"] if "%" not in vfmt else chart_dir,
+                          "period": "24H" if cdays == 1 else f"{cdays}D", "source": f"Source: {csrc} \u00B7 {asof.title().replace('Utc', 'UTC')}"},
+                "person": person, "poll": parts.get("poll", "")})
+    import pickle
+    with open(jd / "job.pkl", "wb") as fh:      # lets `python -m finshorts.premium out/<job>/job.pkl` re-render
+        pickle.dump(job, fh)
+    renderer = cfg["video"].get("renderer", "classic")
+    t2 = time.time()
+    if renderer == "premium":
+        from finshorts import premium
+        dur = premium.render_video(job, out_mp4, cfg)
+        try:
+            log["render_timing"] = json.loads((jd / "render_timing.json").read_text())
+        except Exception:
+            pass
+    else:
+        dur = render.render_video(job, out_mp4, cfg)
+    log["renderer"] = renderer
     log["render_seconds"] = round(time.time() - t2, 1); log["video_duration"] = round(dur, 2)
     import subprocess
     probed = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out_mp4],
@@ -299,7 +331,13 @@ def run(cfg, fmt_name, slot_id="manual", dry_run=True, no_llm=False, sample=None
                     from finshorts.upload_instagram import upload as ig_up
                     icfg = dict(cfg["upload"]["instagram"]); icfg["hosting_provider"] = cfg["upload"]["hosting"]["provider"]
                     icfg["delete_after_publish"] = cfg["upload"]["hosting"]["delete_after_publish"]
-                    mid = ig_up(out_mp4, meta["instagram"]["caption"], icfg)
+                    ig_mp4 = out_mp4
+                    if int(cfg["video"].get("height", 1920)) > 1920:   # Reels spec: 1080x1920 -> high-quality downscale for IG only
+                        ig_mp4 = str(jd / f"{job_id}_ig1080.mp4")
+                        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", out_mp4, "-vf", "scale=1080:1920:flags=lanczos",
+                                        "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-r", "30", "-pix_fmt", "yuv420p",
+                                        "-c:a", "copy", "-movflags", "+faststart", ig_mp4], check=True)
+                    mid = ig_up(ig_mp4, meta["instagram"]["caption"], icfg)
                     dedupe.record_upload("instagram", vh, job_id, mid); log["instagram"] = {"id": mid}
             if story and any(isinstance(log.get(p), dict) for p in ("youtube", "instagram")):
                 dedupe.record_story(story)

@@ -23,47 +23,63 @@ RED = (215, 40, 40)
 SPRITE_W, SPRITE_H = 540, 520
 
 
+_S = SS  # current supersampling scale (SS * output scale), set by draw_gus
+
+
 def _d(img):
     return ImageDraw.Draw(img)
 
 
 def _ell(d, cx, cy, rx, ry, fill, outline=OUTLINE, w=4):
-    s = SS
+    s = _S
     d.ellipse([(cx - rx) * s, (cy - ry) * s, (cx + rx) * s, (cy + ry) * s], fill=fill,
-              outline=outline, width=w * s if outline else 0)
+              outline=outline, width=int(w * s) if outline else 0)
 
 
 def _poly(d, pts, fill, outline=OUTLINE, w=4):
-    s = SS
+    s = _S
     p = [(x * s, y * s) for x, y in pts]
     d.polygon(p, fill=fill)
     if outline:
-        d.line(p + [p[0]], fill=outline, width=w * s, joint="curve")
+        d.line(p + [p[0]], fill=outline, width=int(w * s), joint="curve")
 
 
 def _line(d, pts, fill, w):
-    s = SS
+    s = _S
     d.line([(x * s, y * s) for x, y in pts], fill=fill, width=int(w * s), joint="curve")
 
 
 def _arc(d, cx, cy, rx, ry, a0, a1, fill, w):
-    s = SS
+    s = _S
     d.arc([(cx - rx) * s, (cy - ry) * s, (cx + rx) * s, (cy + ry) * s], a0, a1, fill=fill, width=int(w * s))
 
 
-def draw_gus(eyes="open", mouth=0, snorkel=False, tail_phase=0.0):
-    """Return RGBA sprite (SPRITE_W x SPRITE_H). Fish faces LEFT (towards viewer-left), deadpan."""
+LIDS = {"open": 0.52, "half": 0.8, "closed": 1.08}
+
+
+def draw_gus(eyes="open", mouth=0, snorkel=False, tail_phase=0.0, scale=1.0, layer="all"):
+    """Return RGBA sprite (SPRITE_W*scale x SPRITE_H*scale). Fish faces LEFT (towards viewer-left), deadpan.
+    eyes: "open" | "half" | "closed" or a float eyelid position (0.52 open .. 1.08 closed).
+    layer: "all" | "tail" (tail fan only, drawn behind) | "body" (everything except the tail) - lets the renderer
+    animate the tail continuously at 60 fps without pre-rendering every eyes x mouth x tail combination."""
+    global _S
+    _S = SS * scale
     W, H = SPRITE_W, SPRITE_H
-    img = Image.new("RGBA", (W * SS, H * SS), (0, 0, 0, 0))
+    img = Image.new("RGBA", (int(W * _S), int(H * _S)), (0, 0, 0, 0))
     d = _d(img)
     cx, cy = 250, 250          # body centre
     # --- tail (fan) ---
     sw = 14 * math.sin(tail_phase)
+    if layer == "body":
+        tail_phase = None
     tail = [(cx + 150, cy - 10), (cx + 255, cy - 120 + sw), (cx + 238, cy - 40 + sw * .6),
             (cx + 262, cy + 10 + sw * .3), (cx + 240, cy + 70 + sw * .6), (cx + 258, cy + 125 + sw), (cx + 150, cy + 25)]
-    _poly(d, tail, ORANGE_L)
-    for k in (-80, -40, 0, 40, 80):
-        _line(d, [(cx + 165, cy + 8), (cx + 238, cy + k * 1.2 + sw * .7)], ORANGE_D, 3)
+    if tail_phase is not None:
+        _poly(d, tail, ORANGE_L)
+        for k in (-80, -40, 0, 40, 80):
+            _line(d, [(cx + 165, cy + 8), (cx + 238, cy + k * 1.2 + sw * .7)], ORANGE_D, 3)
+    if layer == "tail":
+        return img.resize((int(W * scale), int(H * scale)), Image.LANCZOS)
     # --- dorsal fin ---
     dors = [(cx - 70, cy - 128), (cx - 20, cy - 190), (cx + 30, cy - 178), (cx + 70, cy - 186), (cx + 95, cy - 150),
             (cx + 120, cy - 128), (cx + 60, cy - 110)]
@@ -75,9 +91,10 @@ def draw_gus(eyes="open", mouth=0, snorkel=False, tail_phase=0.0):
     # --- body ---
     _ell(d, cx, cy, 175, 145, ORANGE, w=5)
     # belly highlight
-    belly = Image.new("RGBA", img.size, (0, 0, 0, 0)); bd = _d(belly)
-    _ell(bd, cx - 30, cy + 55, 120, 70, BELLY + (170,), outline=None)
-    belly = belly.filter(ImageFilter.GaussianBlur(10 * SS))
+    # colour-filled layer + blurred alpha only (blurring RGBA over transparent black gives a dark fringe)
+    ba = Image.new("L", img.size, 0); _ell(_d(ba), cx - 30, cy + 55, 120, 70, 170, outline=None)
+    belly = Image.new("RGBA", img.size, BELLY[:3] + (0,))
+    belly.putalpha(ba.filter(ImageFilter.GaussianBlur(10 * _S)))
     bm = Image.new("L", img.size, 0); _ell(_d(bm), cx, cy, 170, 140, 255, outline=None)
     from PIL import ImageChops as _IC
     belly.putalpha(_IC.multiply(belly.getchannel("A"), bm))
@@ -109,8 +126,8 @@ def draw_gus(eyes="open", mouth=0, snorkel=False, tail_phase=0.0):
         _ell(d, ex - r * .25, ey + r * .2, r * .38, r * .42, BLACK, outline=None)
         _ell(d, ex - r * .35, ey + r * .05, r * .1, r * .1, WHITE, outline=None)
         # heavy eyelid - deadpan look
-        lid = {"open": 0.52, "half": 0.8, "closed": 1.08}[eyes]
-        s = SS
+        lid = LIDS[eyes] if isinstance(eyes, str) else float(eyes)
+        s = _S
         top = ey - r * 1.08
         lid_img = Image.new("L", img.size, 0); ld = _d(lid_img)
         ld.rectangle([(ex - r - 6) * s, top * s, (ex + r + 6) * s, (top + 2 * r * 1.05 * lid) * s], fill=255)
@@ -141,7 +158,7 @@ def draw_gus(eyes="open", mouth=0, snorkel=False, tail_phase=0.0):
         _line(d, [(sx - 22, my + 10), (sx - 32, my - 8), (sx - 34, cy - 205)], (190, 150, 20), 3)
         _ell(d, sx - 34, cy - 212, 14, 10, RED, outline=BLACK, w=3)
         _ell(d, sx + 10, my + 10, 9, 11, RED, outline=BLACK, w=3)
-    return img.resize((W, H), Image.LANCZOS)
+    return img.resize((int(W * scale), int(H * scale)), Image.LANCZOS)
 
 
 def sprite_set(snorkel=False):
