@@ -11,11 +11,11 @@
 <body>
 <header><div class="wrap"><nav>
 <a class="brand" href="index.html"><img src="avatar.png" alt="Gus Markets avatar">Gus <span class="accent">Markets</span></a>
-<div class="links"><a href="index.html">Home</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></div>
+<div class="links"><a href="index.html">Home</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="imprint.html">Imprint</a></div>
 </nav></div></header>
 <main><div class="wrap">
 <h1>Privacy Policy</h1>
-<p class="meta">Gus Markets Uploader · Last updated: 27 October 2026</p>
+<p class="meta">Gus Markets Uploader · Last updated: 30 October 2026</p>
 
 <p>This Privacy Policy describes how the “Gus Markets Uploader” application (the “App”) handles information. The App is operated by the owner of the YouTube channel Gus Markets (<a href="https://www.youtube.com/@GusMarkets">@GusMarkets</a>) and is used solely by the channel owner to upload and manage videos on the owner’s own YouTube channel.</p>
 
@@ -24,8 +24,10 @@
 
 <h2>Google OAuth scopes and how they are used</h2>
 <ul>
-<li><code>https://www.googleapis.com/auth/youtube.upload</code> – to upload the channel’s own Shorts videos to the owner’s own YouTube channel.</li>
-<li><code>https://www.googleapis.com/auth/youtube.readonly</code> – to read basic information about the owner’s own channel and its own uploaded videos (for example, to confirm an upload succeeded and avoid duplicate uploads).</li>
+<li><code>https://www.googleapis.com/auth/youtube</code> – to manage the owner’s own YouTube channel, for example updating the channel description and the metadata (titles, descriptions, tags, playlists) of the channel’s own videos.</li>
+<li><code>https://www.googleapis.com/auth/youtube.upload</code> – to upload the channel’s own videos (Shorts and the daily long-form update) and their thumbnails to the owner’s own YouTube channel.</li>
+<li><code>https://www.googleapis.com/auth/youtube.force-ssl</code> – to manage captions (subtitle files) of the channel’s own videos and to read, post, pin or moderate comments on the channel’s own videos.</li>
+<li><code>https://www.googleapis.com/auth/yt-analytics.readonly</code> – to read aggregated performance statistics of the owner’s own channel and videos (for example views, watch time, retention). These statistics are used only to improve the channel’s content and are never shared with third parties.</li>
 </ul>
 <p>The App requests no other scopes and uses these scopes only for the purposes listed above.</p>
 
@@ -33,7 +35,7 @@
 <p>The OAuth refresh token for the owner’s account is stored only as an encrypted GitHub Actions secret in the owner’s repository and is used solely by the automated upload workflow. It is never written to the public repository, logs, or any other location. The App does not operate a database of user data.</p>
 
 <h2>Data we collect</h2>
-<p>The App collects <strong>no data from viewers, subscribers or any third parties</strong>. It does not read comments, viewer profiles, analytics of other users, or any personal information of anyone other than the channel owner’s own channel data needed to upload and manage its own videos.</p>
+<p>The App processes only data belonging to or appearing on the owner’s own channel: channel and video metadata, captions, aggregated (non-personal) YouTube Analytics statistics, and public comments posted on the channel’s own videos, which are read solely to reply to or moderate them. The App does not build viewer profiles, does not collect contact details of viewers, and does not access any other channel’s data.</p>
 
 <h2>Sharing and selling</h2>
 <p>No data obtained through Google APIs is shared with, transferred to, or sold to any third party. No data is used for advertising.</p>
@@ -54,11 +56,11 @@
 <p>Changes to this policy will be published on this page with an updated date.</p>
 
 <h2>Contact</h2>
-<p>For questions about this policy, please open an issue on the GitHub repository: <a href="https://github.com/nathanaelyommarak-hub/gus-markets/issues">github.com/nathanaelyommarak-hub/gus-markets/issues</a>.</p>
+<p>For questions about this policy, please contact: <a href="mailto:redcandle67+gusmarkets@mail.grokbot.com">redcandle67+gusmarkets@mail.grokbot.com</a>. See also the <a href="imprint.html">Imprint / Impressum</a>.</p>
 </div></main>
 <footer><div class="wrap">
 <p>© 2026 Gus Markets · Not financial advice. For entertainment and education only.</p>
-<p><a href="index.html">Home</a>·<a href="privacy.html">Privacy Policy</a>·<a href="terms.html">Terms of Service</a>·<a href="https://www.youtube.com/@GusMarkets">YouTube</a>·<a href="https://github.com/nathanaelyommarak-hub/gus-markets">GitHub</a></p>
+<p><a href="index.html">Home</a>·<a href="privacy.html">Privacy Policy</a>·<a href="terms.html">Terms of Service</a>·<a href="imprint.html">Imprint</a>·<a href="https://www.youtube.com/@GusMarkets">YouTube</a>·<a href="https://github.com/nathanaelyommarak-hub/gus-markets">GitHub</a></p>
 </div></footer>
 </body>
 </html>
