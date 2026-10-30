@@ -94,6 +94,10 @@ def due_slot(cfg, now=None, is_uploaded=None, last_upload_ts=None):
 
 def effective_slot(cfg, slot, day):
     """Apply weekend overrides (stock markets closed). Returns None if the slot is skipped that day."""
+    rot = slot.get("rotation")
+    if rot:                                   # weekday rotation Mon..Sun; rotated formats are weekend-safe by design
+        f = rot[day.weekday() % len(rot)]
+        return None if f == "skip" else {**slot, "format": f}
     wk = {5: "sat", 6: "sun"}.get(day.weekday())
     ov = (cfg["schedule"].get("weekend_overrides") or {}).get(wk, {}) if wk else {}
     f = ov.get(slot["format"], slot["format"])

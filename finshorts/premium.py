@@ -700,6 +700,7 @@ def draw_person(S, t, tl, span):
 
 def poll_options(q):
     ql = q.lower()
+    if re.search(r"\bA\b.+\bB\b.+\bC\b", q): return [("A", MINT, 0), ("B", ORANGE, 0), ("C", CORAL, 0)]   # weekly vote
     if re.search(r"\bup or down\b|\bhigher or lower\b", ql): return [("UP", MINT, 1), ("DOWN", CORAL, -1)]
     if re.search(r"\byes or no\b", ql): return [("YES", MINT, 0), ("NO", CORAL, 0)]
     m = re.search(r"^(\w+ing)\b.*\bor (\w+ing)\b", ql)
@@ -769,6 +770,35 @@ def draw_poll(S, t, tl):
     if tl > 1.0:
         h2 = S["hint"].copy(); h2.putalpha(h2.getchannel("A").point(lambda v, a=e_out((tl - 1.0) / 0.4): int(v * a)))
         im.alpha_composite(h2, (int(S["w"] / 2 - h2.width / 2), S["hint_y"] + int(8 * math.sin(tl * 4))))
+    return im
+
+
+def build_why(text):
+    """WHY IT MATTERS card (61-90 s format): orange chip + the sentence in large type, line-by-line reveal."""
+    w = STAGE_W
+    chip = pill("WHY IT MATTERS", font(F_MONT, 58), ORANGE, INK, padx=44, h=116)
+    q = re.sub(r"^why it matters( to you)?:\s*", "", text, flags=re.I)
+    q = q[:1].upper() + q[1:]
+    fq = font(F_MONT, 92); lines = wrap(q, fq, w - 200)
+    if len(lines) > 6: fq = font(F_MONT, 76); lines = wrap(q, fq, w - 200)[:8]
+    qimgs = [text_img(ln, fq, WHITE, pad=4) for ln in lines]
+    lh = int(fq.size * 1.28); h = 260 + len(qimgs) * lh + 120
+    base = card(w, h, edge=(60, 90, 150), accent=ORANGE)
+    return {"base": base, "chip": chip, "q": qimgs, "w": w, "h": h, "lh": lh}
+
+
+def draw_why(S, t, tl, span):
+    im = S["base"].copy()
+    k = e_back(tl / 0.45)
+    im.alpha_composite(S["chip"], (int(80 - (1 - k) * 400), 70))
+    n = max(1, len(S["q"])); step = max(0.12, min(0.9, (span - 1.0) / n))
+    y = 260
+    for j, q in enumerate(S["q"]):
+        kj = e_quint((tl - 0.2 - j * step) / 0.45)
+        if kj > 0.01:
+            q2 = q.copy(); q2.putalpha(q2.getchannel("A").point(lambda v, a=kj: int(v * a)))
+            im.alpha_composite(q2, (100, int(y + (1 - kj) * 40)))
+        y += S["lh"]
     return im
 
 
@@ -990,7 +1020,7 @@ def setup(job, cfg, dur):
     bl, tt = [], rnd.uniform(1.2, 2.4)
     while tt < dur: bl.append(tt); tt += rnd.uniform(2.2, 4.6)
     c["blinks"] = bl
-    order = ["THE QUESTION", "THE NUMBERS", "THE PROOF", "GUS'S TAKE", "YOUR CALL"]
+    order = ["THE QUESTION", "THE NUMBERS", "THE PROOF", "WHY IT MATTERS", "GUS'S TAKE", "YOUR CALL"]
     c["chapters"] = [x for x in order if any(s["chapter"] == x for s in tl)]
     c["chapter_at"] = lambda t: R.chapter_at(tl, t) if tl else ""
     segs = {}
@@ -1000,7 +1030,7 @@ def setup(job, cfg, dur):
     t_num_end = segs["THE NUMBERS"][-1]["t1"] if "THE NUMBERS" in segs else t_num + 4
     takes = segs.get("GUS'S TAKE", [])
     take = next((s for s in takes if "take" in s["text"].lower()[:12]), takes[0] if takes else None)
-    proof, poll = first("THE PROOF"), first("YOUR CALL")
+    proof, poll, whyseg = first("THE PROOF"), first("YOUR CALL"), first("WHY IT MATTERS")
     endcp = takes[-1] if takes and takes[-1] is not take else None
     c["take"] = (take["t0"] - 0.15, take["t1"] + 0.1) if take else None
     c["deadpan"] = endcp["t0"] if endcp else None
@@ -1015,7 +1045,7 @@ def setup(job, cfg, dur):
     # scenes
     scenes = []
     hero = build_hero(job)
-    stage_end_data = proof["t0"] if proof else (c["take"][0] if c["take"] else dur - 0.4)
+    stage_end_data = proof["t0"] if proof else (whyseg["t0"] if whyseg else (c["take"][0] if c["take"] else dur - 0.4))
     scenes.append({"t0": -0.25, "t1": t_num - 0.05, "cy": STAGE_Y + 640, "draw": lambda t, tl, S=hero: draw_hero(S, t, tl + 0.0)})
     ch = job.get("chart")
     if ch and len(ch.get("pts", [])) > 2:
@@ -1044,6 +1074,10 @@ def setup(job, cfg, dur):
             P = build_person(job["person"])
             scenes.append({"t0": sw, "t1": pe, "cy": STAGE_Y + P["h"] / 2,
                            "draw": lambda t, tl, S=P, sp=pe - sw: draw_person(S, t, tl, sp)})
+    if whyseg:
+        WY = build_why(whyseg["text"]); we = whyseg["t1"] + 0.25
+        scenes.append({"t0": whyseg["t0"] - 0.1, "t1": we, "cy": STAGE_Y + max(WY["h"] / 2, STAGE_H / 2 - 120),
+                       "draw": lambda t, tl, S=WY, sp=we - whyseg["t0"]: draw_why(S, t, tl, sp)})
     if poll:
         PL = build_poll(poll["text"])
         scenes.append({"t0": poll["t0"] - 0.1, "t1": dur - 0.36, "cy": STAGE_Y + max(PL["h"] / 2, STAGE_H / 2 - 120), "draw": lambda t, tl, S=PL: draw_poll(S, t, tl)})

@@ -862,7 +862,8 @@ def render_frame(i):
     for (a, b) in c["pb_segs"]:
         xa, xb = a / dur * W + 5, b / dur * W - 5
         d.rectangle([xa, PB_Y, xb, PB_Y + 16], fill=(40, 56, 96))
-        if t > a: d.rectangle([xa, PB_Y, min(xb, t / dur * W), PB_Y + 16], fill=ORANGE)
+        xt = min(xb, t / dur * W)
+        if t > a and xt > xa: d.rectangle([xa, PB_Y, xt, PB_Y + 16], fill=ORANGE)
     if st0 <= t <= st1: draw_sting(fr, c["sting_S"], t - st0, st1 - st0)
     gx, gy, gs = gus_pose(t)
     if st0 + 0.2 <= t <= st0 + 1.2: gs *= 1 + 0.06 * math.sin(math.pi * clamp((t - st0 - 0.2) / 1.0))
@@ -1112,10 +1113,19 @@ def encoder_args(vc, fps, threads):
 def _seg_worker(args):
     i0, i1, path, enc = args
     p = subprocess.Popen(enc + [path], stdin=subprocess.PIPE)
-    for i in range(i0, i1): p.stdin.write(render_frame(i).tobytes())
+    last, errs = None, []
+    for i in range(i0, i1):
+        try:
+            last = render_frame(i).tobytes()
+        except Exception as e:        # one bad frame must not cost the whole 4K render: repeat the previous frame, count it
+            import traceback
+            if not errs: traceback.print_exc()
+            errs.append(i)
+            if last is None: last = np.zeros((H, W, 3), np.uint8).tobytes()
+        p.stdin.write(last)
     p.stdin.close(); p.wait()
     if p.returncode: raise RuntimeError(f"segment encode failed {path}")
-    return path
+    return path, errs
 
 
 def render_video(job, out_mp4, cfg, frames=None, span=None, workers=None):
@@ -1149,8 +1159,13 @@ def render_video(job, out_mp4, cfg, frames=None, span=None, workers=None):
     t1 = time.time()
     import multiprocessing as mp
     with mp.get_context("fork").Pool(workers) as pool:
-        paths = pool.map(_seg_worker, tasks, chunksize=1)
+        res = pool.map(_seg_worker, tasks, chunksize=1)
     timing["frames_s"] = round(time.time() - t1, 1)
+    paths = [r[0] for r in res]; errs = sorted(i for r in res for i in r[1])
+    timing["frame_errors"] = len(errs)
+    if errs:
+        print(f"::warning title=render::{len(errs)} frame(s) failed and were held (first {errs[:5]})")
+        if len(errs) > max(30, 0.01 * n): raise RuntimeError(f"{len(errs)} frames failed to render -> not publishing")
     lst = segdir / "list.txt"; lst.write_text("".join(f"file '{p}'\n" for p in paths))
     aud = ["-ss", f"{i_a / fps:.3f}", "-t", f"{n / fps:.3f}", "-i", mixed] if span else ["-i", mixed]
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(lst), *aud,

@@ -52,6 +52,8 @@ def build_facts(snap, fmt_name, cfg, now_utc=None):
         i = snap.get("indices", {}).get(sym)
         if i:
             f[f"{key}_LEVEL"] = idx(i["last"]); f[f"{key}_MOVE"] = move(i["chg_1d"])
+            pw = i.get("points") or []
+            if len(pw) > 5 and pw[-6][1]: f[f"{key}_MOVE_1W"] = move((pw[-1][1] / pw[-6][1] - 1) * 100)   # last 5 sessions
             ad = dt.date.fromisoformat(str(i["asof"])[:10])
             f[f"{key}_ASOF"] = ad.strftime("%A")
             f[f"{key}_ASOF_CLOSE"] = asof_words(ad, sess["ny_date"])
@@ -100,7 +102,7 @@ def freshness_ok(parts, facts, kind):
 
 def validate(parts, facts, min_w=48, max_w=92):
     """Reject anything with numbers not coming from placeholders. Word range excludes CTA/source line/catchphrase."""
-    full = " ".join(parts.get(k, "") for k in ("hook", "body", "story", "take", "poll"))
+    full = " ".join(parts.get(k, "") for k in ("hook", "body", "story", "why", "take", "poll"))
     for k, t in parts.items():
         for ph in PH.findall(t):
             if ph not in facts:
@@ -108,39 +110,56 @@ def validate(parts, facts, min_w=48, max_w=92):
         stripped = ALLOWED.sub("", PH.sub("", t))
         if re.search(r"\d", stripped):
             return False, f"digit outside placeholder in {k}: {stripped[:80]}"
-        if k != "title" and re.search(NUM_WORDS, stripped, re.I):
-            return False, f"number word outside placeholder in {k}"
+        m = re.search(NUM_WORDS, stripped, re.I) if k != "title" else None
+        if m:
+            ctx = stripped[max(0, m.start() - 30): m.end() + 30].strip()
+            return False, (f"number word '{m.group(0)}' outside placeholder in {k} (\"...{ctx}...\"): rephrase without any"
+                           " number words (no one, single, first, half, dozen etc.) - only placeholders may carry numbers")
     words = len(fill(full, facts).split())
     if not (min_w <= words <= max_w):
         return False, f"word count {words} not in [{min_w},{max_w}]"
-    if len(parts["hook"].split()) > 10:
-        return False, "hook too long (must land in first 2 s)"
+    if len(parts["hook"].split()) > 12:
+        return False, "hook too long (max 12 words, must land in the first 3 s)"
     return True, "ok"
 
 
 # ---------------- LLM providers ----------------
-SYSTEM = """You write 25-40 second English scripts for "Gus Markets", a premium finance-news YouTube Short hosted by Gus,
-a deadpan, chubby orange goldfish in a navy necktie who lives in a fishbowl (water rises on green days, he wears a
-snorkel on red days). Gus is openly a cartoon fish, never claims to be a human or a licensed expert. Voice: calm, dry
-newsreader with understated goldfish humor. Every word must earn its place. Rules - follow ALL:
+SYSTEM = """You write 65-85 second English scripts (spoken: 140-195 words) for "Gus Markets", a premium finance-news
+YouTube Short hosted by Gus, a deadpan, chubby orange goldfish in a navy necktie who lives in a fishbowl (water rises on green
+days, he wears a snorkel on red days). Gus is openly a cartoon fish, never claims to be a human or a licensed expert. Voice:
+calm, dry newsreader with understated goldfish humor. Format: ONE story, ONE aha. Every video has a named actor (a company,
+institution, country or person named in the facts or the verified story), one concrete number, one line on why it matters to
+the viewer, and one Gus joke. Rules - follow ALL:
 1. NEVER write any digit or number word. Any price, percentage, level or amount MUST be written ONLY as one of the
    provided {PLACEHOLDERS} exactly (e.g. "Bitcoin is {BTC_MOVE} at {BTC_PRICE}"). Use only placeholders from the list.
-   Put each placeholder in a sentence that NAMES its asset (never "{ETH_MOVE}" in a sentence about Solana).
-   Never put a direction verb that contradicts the value (no "jumped {BTC_MOVE}" when it is "down ..."): prefer
-   neutral verbs like "is", "sits at", "closed", "trades".
+   Numbers that appear only in a news headline are NOT verified: leave them out. Put each placeholder in a sentence that
+   NAMES its asset. Never put a direction verb that contradicts the value: prefer "is", "sits at", "closed", "trades".
 2. Do not invent facts, causes or quotes. Only use the provided facts and the verified story. No predictions, no
-   buy/sell advice, no promotions, no links.
-3. hook: the strongest, most surprising angle of TODAY's data as a QUESTION, 5-8 words, must land within 1.5 seconds
-   when read aloud, ends with "?". Concrete beats vague ("Did Bitcoin just lose its floor?" not "What happened today?").
-4. body: deliver the payoff fast - the key numbers first, then one line on why it matters, 22-38 words. Short sentences.
+   buy/sell advice, no product recommendations, no promotions, no links. Illustrations must be labelled as an example.
+3. hook: 5-12 words, lands within 3 seconds; the most surprising angle as a question or a bold statement.
+4. body: 55-90 words - what happened: the named actor, then the concrete numbers (placeholders), short sentences.
    Stock index levels are "as of" the given weekday close.
-5. story: if a VERIFIED STORY is given, one neutral sentence (max 22 words) accurately paraphrasing it in your own
-   words (who did what), no numbers, no added causes; else "".
-6. take: Gus's own short opinion/context, 8-16 words, deadpan, starts with "My take:". No catchphrase.
-7. poll: one short audience question answerable in one word in the comments (max 10 words, ends with "?"), ideally
-   an either/or ("dip or drop?") that echoes the hook so the video loops back to its first line.
-8. title: max 60 characters, a curiosity question or clear statement, may use placeholders, no clickbait lies, no hashtags.
-Return ONLY JSON: {"hook": "...", "body": "...", "story": "...", "take": "...", "poll": "...", "title": "..."}"""
+5. story: if a VERIFIED STORY is given, 25-45 words accurately paraphrasing it in your own words (who did what), naming
+   the main actor, no numbers, no added causes; else "".
+6. why: 18-35 words starting with "Why it matters to you:" - the practical meaning for an ordinary viewer, no advice.
+7. take: Gus's own opinion with a goldfish joke (memory, bowl, water), 10-25 words, deadpan, starts with "My take:".
+   No catchphrase.
+8. poll: one audience question answerable in one word in the comments (max 12 words, ends with "?"), ideally an
+   either/or ("dip or drop?") that echoes the hook so the video loops back to its first line.
+9. title: max 60 characters, a curiosity question or clear statement, may use placeholders, no clickbait lies, no hashtags.
+Return ONLY JSON: {"hook": "...", "body": "...", "story": "...", "why": "...", "take": "...", "poll": "...", "title": "..."}"""
+SERIES = {   # test series (start audit, section 8)
+    "explains": ("GUS EXPLAINS - a news explainer: explain the ONE verified story. Who did what (named actor), the single most "
+                 "important live number from the placeholders, and what it means for someone holding stocks or crypto."),
+    "myth": ("GUS VS. MYTH - a counter-take: the hook states a popular money myth (without number words), the body busts it with "
+             "textbook logic and today's live numbers from the placeholders (e.g. yields up = existing bond prices down; a cheap coin "
+             "is not a bargain without supply; one red day is not a trend). Any worked example is clearly labelled 'for example'. "
+             "Name a real actor such as the Federal Reserve, the US Treasury or Bitcoin. Poll: 'Which myth should I bust next?' style."),
+    "week": ("GUS FORGOT THE WEEK - Saturday series, Part of a weekly ritual. Hook: Gus forgot the whole week and asks for help "
+             "remembering. Body: three things from the week - crypto ({BTC_MOVE_7D}), stocks ({SPX_MOVE_1W} if given) and rates "
+             "({US10Y}) - then 'the one number to remember'. Poll: viewers vote A, B or C for next week's deep dive; name the three "
+             "options in the poll in max 4 words each, e.g. 'Vote: A bonds, B Bitcoin, or C the dollar?'."),
+}
 
 
 def _user_prompt(fmt_name, fmt, facts, story, extra):
@@ -227,16 +246,72 @@ POLLS = {
 }
 KIND = {"crypto_update": "crypto", "crypto_morning": "crypto", "top_movers": "movers", "midday_movers": "movers",
         "chart_of_the_day": "chart", "explainer": "explainer", "quiz": "quiz", "macro_watch": "macro",
-        "macro_calendar": "calendar", "myth_buster": "myth"}
+        "macro_calendar": "calendar", "myth_buster": "myth", "gus_explains": "explains", "gus_vs_myth": "myth",
+        "gus_forgot_week": "week"}
 
 
 def kind_of(fmt_name, fmt):
     return fmt.get("kind") or KIND.get(fmt_name, "stocks")
 
 
+WHY = {
+    "crypto": "Why it matters to you: crypto moves fast in both directions, so how much you hold matters far more than when you read the headline.",
+    "movers": "Why it matters to you: the biggest daily movers are usually the riskiest coins, and yesterday's winner is often tomorrow's loser.",
+    "chart": "Why it matters to you: one chart will not tell you what happens next, but it shows you where the money has been leaning lately.",
+    "explainer": "Why it matters to you: this one idea sits behind your savings rate, your mortgage and the price of almost every asset you own.",
+    "quiz": "Why it matters to you: weekly moves tell you more than hourly noise, and they are much easier on the nerves.",
+    "macro": "Why it matters to you: yields set the price of borrowing, from mortgages to company loans, and that feeds into stocks and crypto.",
+    "calendar": "Why it matters to you: big releases can move rates, stocks and crypto within minutes, so it helps to know the dates.",
+    "myth": "Why it matters to you: myths sound simple, and simple ideas are exactly how people end up taking risks they never meant to take.",
+    "week": "Why it matters to you: a week is long enough to see the trend and short enough to ignore most of the noise.",
+    "stocks": "Why it matters to you: most retirement and savings accounts track these indexes, so a move here quietly moves a lot of people's money.",
+}
+CONTEXT = {   # neutral, number-free context lines that bring the template to the 61-90 s format
+    "crypto": "Crypto trades around the clock, every day of the week, so these numbers can shift while you sleep. Bitcoin still sets the tone for most other coins, and Ether usually follows its lead.",
+    "stocks": "The S and P tracks the biggest American companies, and the Nasdaq leans heavily on tech. When they move together, the mood is broad. When tech moves more, it is usually about growth and interest rates.",
+    "macro": "When yields climb, borrowing gets more expensive for families, companies and governments alike. When they fall, money gets cheaper, and riskier assets often feel the relief first.",
+}
+JOKES = ["Not that I will remember any of this by lunch.", "I wrote it down on the glass. Then the glass got cleaned.",
+         "I would panic, but I forgot what about.", "Goldfish memory. Honestly, it helps on days like this."]
+
+
 def template_script(fmt_name, fmt, facts, story, mood, rnd):
+    parts = _template_core(fmt_name, fmt, facts, story, mood, rnd)
+    kind = kind_of(fmt_name, fmt)
+    k2 = {"explains": "crypto" if story and "crypto" in (fmt.get("news_topics") or []) else "stocks", "week": "stocks"}.get(kind, kind)
+    ctx = CONTEXT.get({"movers": "crypto", "quiz": "crypto", "chart": "macro", "explainer": "macro", "calendar": "macro",
+                       "myth": "crypto"}.get(k2, k2), CONTEXT["stocks"])
+    parts["body"] = parts["body"] + " " + ctx
+    if not parts.get("story"):      # no news segment -> one more number-free line keeps the video above sixty seconds
+        parts["body"] += " " + rnd.choice(["Gus rule of thumb: when a money claim sounds too simple, check what it leaves out. Usually it is risk, time, or both.",
+                                           "Remember, a price is just where buyers and sellers agreed for a moment. The reasons behind it matter more than the number itself."])
+    parts["why"] = WHY.get(kind, WHY.get(k2, WHY["stocks"]))
+    parts["take"] = parts["take"] + " " + rnd.choice(JOKES)
+    if story and parts["story"]:
+        parts["story"] += " That is the verified headline, so the details may still change as more reporting comes in."
+    pad = ["Big moves get headlines, but steady habits build wealth. Gus rule: never let one day decide your whole plan.",
+           "If you only check one thing, check the trend, not the tick. Trends tell you where the water is flowing.",
+           "Markets love to surprise the crowd, so a calm plan usually beats a fast reaction."]
+    rnd.shuffle(pad)
+    lo = int(fmt.get("_min_words", 128))
+    while pad and len(fill(" ".join(parts.get(k, "") for k in ("hook", "body", "story", "why", "take", "poll")), facts).split()) < lo:
+        parts["body"] += " " + pad.pop()
+    return parts
+
+
+def _template_core(fmt_name, fmt, facts, story, mood, rnd):
     h = lambda *xs: rnd.choice(xs)
     kind = kind_of(fmt_name, fmt)
+    if kind == "explains":
+        kind = "crypto" if "crypto" in (fmt.get("news_topics") or []) and (not story or "crypto" in story.get("topics", ["crypto"])) else "stocks"
+    if kind == "week":
+        hook = "I forgot the whole week. Help me remember?"
+        body = ("Crypto first: Bitcoin is {BTC_MOVE_7D} on the week at {BTC_PRICE}, and Ether is {ETH_MOVE_7D}. "
+                + ("Stocks: over the week the S and P five hundred is {SPX_MOVE_1W}, and the Nasdaq is {NDX_MOVE_1W}. "
+                   if "SPX_MOVE_1W" in facts and "NDX_MOVE_1W" in facts else "Stocks: as of {SPX_ASOF_CLOSE}, the S and P five hundred stood at {SPX_LEVEL}. ")
+                + "Rates: the ten year Treasury yield is {US10Y}. The one number to remember: Bitcoin at {BTC_PRICE}.")
+        return {"hook": hook, "body": body, "story": "", "take": h(*TAKES[mood]),
+                "poll": "Vote for next week's deep dive: A bonds, B Bitcoin, or C the dollar?", "title": "The Week Gus Forgot: stocks, crypto, rates"}
     if kind == "chart" and "BTC_PRICE" in facts and "CHART_NAME" not in facts:
         kind = "crypto"
     crypto_body = "Bitcoin trades at {BTC_PRICE}, {BTC_MOVE} in a day and {BTC_MOVE_7D} on the week. Ether is {ETH_MOVE} at {ETH_PRICE}."
@@ -297,15 +372,19 @@ def template_script(fmt_name, fmt, facts, story, mood, rnd):
                     "The ten year yield was {US10Y}. Bitcoin is {BTC_MOVE} over the past day.")
         title = hook if rnd.random() < .5 else "S&P 500 {SPX_MOVE}: " + hook[0].lower() + hook[1:]
     st = ""
-    if story and len(story["headline"].split()) <= 18:
-        st = f"The story: {story['headline'].rstrip('.')}."
+    if story and len(story["headline"].split()) <= 22:
+        # verified multi-source headline -> spoken verbatim via a placeholder (digits in it are part of the cited headline)
+        hl = re.sub(r"(\d(?:[\d.,]*\d)?)\s?([BMK])\b", lambda m: m.group(1) + {"B": " billion", "M": " million", "K": " thousand"}[m.group(2)],
+                    story["headline"].rstrip("."))
+        facts["STORY_HEADLINE"] = hl          # sources are named right after this in assemble()
+        st = "The story: {STORY_HEADLINE}."
     return {"hook": hook, "body": body, "story": st, "take": h(*TAKES[mood]),
             "poll": h(*POLLS.get(kind, POLLS["stocks"])), "title": title}
 
 
 def _prune(parts, facts):
     """Drop sentences whose placeholders are missing (e.g. a provider was down)."""
-    for k in ("hook", "body", "story", "take", "poll", "title"):
+    for k in ("hook", "body", "story", "why", "take", "poll", "title"):
         sents = re.split(r"(?<=[.!?])\s+", parts.get(k, ""))
         parts[k] = " ".join(s for s in sents if all(p in facts for p in PH.findall(s)))
     parts["hook"] = parts["hook"] or "What moved markets?"
@@ -318,6 +397,8 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
     rnd = random.Random(seed)
     kind = kind_of(fmt_name, fmt)
     extra = f"Format: {fmt['label']}. Market mood: {mood}."
+    if kind in SERIES:
+        extra += " " + SERIES[kind]
     if kind == "explainer":
         extra += " Explain one concept simply (bond yields, rate cuts, or market cap) using the facts as a live example."
     if kind == "quiz":
@@ -330,11 +411,12 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
     log = []
     for prov in cfg["llm"]["providers"]:
         if prov == "template":
-            parts = _prune(template_script(fmt_name, fmt, facts, story, mood, rnd), facts)
-            ok, why = validate(parts, facts, min_w=40, max_w=100)
+            tw = cfg["video"].get("template_words", (40, 100))
+            parts = _prune(template_script(fmt_name, {**fmt, "_min_words": tw[0] + 8}, facts, story, mood, rnd), facts)
+            ok, why = validate(parts, facts, *tw)
             if not ok and "digit" in why and parts["story"]:   # headline contained digits -> drop story sentence
                 parts["story"] = ""
-                ok, why = validate(parts, facts, min_w=40, max_w=100)
+                ok, why = validate(parts, facts, *tw)
             fok, fwhy = freshness_ok(parts, facts, kind)
             if not fok:
                 raise RuntimeError("template freshness bug: " + fwhy)
@@ -351,14 +433,15 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
             log.append("ollama: skipped (CI, no OLLAMA_HOST)")
             continue
         fn = {"groq": llm_groq, "gemini": llm_gemini, "ollama": llm_ollama}[prov]
+        fb = ""
         for attempt in range(cfg["llm"]["max_retries"] + 1):
             try:
-                parts = fn(cfg, SYSTEM, _user_prompt(fmt_name, fmt, facts, story, extra))
-                parts = {k: str(parts.get(k, "")).strip() for k in ("hook", "body", "story", "take", "poll", "title")}
+                parts = fn(cfg, SYSTEM, _user_prompt(fmt_name, fmt, facts, story, extra + fb))
+                parts = {k: str(parts.get(k, "")).strip() for k in ("hook", "body", "story", "why", "take", "poll", "title")}
                 if not story: parts["story"] = ""
-                ok, why = validate(parts, facts)
-                if ok and not parts["hook"].rstrip().endswith("?"):
-                    ok, why = False, "hook must be a question"
+                ok, why = validate(parts, facts, *cfg["video"].get("script_words", (48, 92)))
+                if ok and parts["why"] and not parts["why"].lower().startswith("why it matters"):
+                    ok, why = False, "why must start with 'Why it matters to you:'"
                 if ok:
                     ok, why = freshness_ok(parts, facts, kind)
                 if ok:      # every number / attribution / direction must match the fetched data, else regenerate
@@ -367,6 +450,10 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
                 log.append(f"{prov}#{attempt}: {why}")
                 if ok:
                     return parts, prov, log
+                fb = f" PREVIOUS ATTEMPT WAS REJECTED ({why[:200]}). Fix exactly that."
+                if why.startswith("word count"):
+                    fb += (" Write LONGER: body 70-90 words, story 30-45 words, why 20-35 words, take 12-25 words;"
+                           " total of hook+body+story+why+take+poll must be 150-190 words.")
             except Exception as e:
                 code = getattr(getattr(e, "response", None), "status_code", None)
                 log.append(f"{prov}#{attempt}: {type(e).__name__}: {str(e)[:120]}".replace(env("GEMINI_API_KEY") or "\0", "***"))
@@ -424,6 +511,8 @@ def assemble(parts, facts, catchphrase, story=None, cta_after_words=22):
         src = story["sources"][:3]
         proof += (" Reported independently by " + ", ".join(src[:-1]) + " and " + src[-1] + ".") if len(src) > 1 else f" Reported by {src[0]}."
         segs.append(("THE PROOF", proof))
+    why = _clean(fill(parts.get("why", ""), facts))
+    if why: segs.append(("WHY IT MATTERS", why))
     segs.append(("GUS'S TAKE", _clean(fill(parts["take"], facts))))
     poll = _clean(fill(parts.get("poll", ""), facts))
     if poll:

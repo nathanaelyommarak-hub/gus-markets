@@ -13,6 +13,7 @@ on:
     inputs:
       format: {description: "daily_update | weekend_update (empty = by weekday)", required: false, default: "daily_update"}
       dry_run: {description: "dry run (render only, no upload)", type: boolean, default: true}
+      stills: {description: "TEST: comma-separated frame numbers -> 4K PNG stills + thumbnail only (forces dry run)", required: false, default: ""}
 
 permissions:
   contents: write          # commit state/long_log.json
@@ -76,6 +77,7 @@ jobs:
         timeout-minutes: 125
         env:
           IN_DRY: ${{ github.event.inputs.dry_run }}
+          IN_STILLS: ${{ github.event.inputs.stills }}
           G_FORMAT: ${{ steps.gate.outputs.format }}
           G_DATE: ${{ steps.gate.outputs.slot_date }}
         run: |
@@ -83,6 +85,7 @@ jobs:
           if [ -n "$G_FORMAT" ]; then ARGS="--format $G_FORMAT"; fi
           if [ -n "$G_DATE" ]; then ARGS="$ARGS --slot-date $G_DATE"; fi
           if [ "$IN_DRY" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ -n "$IN_STILLS" ]; then [[ "$IN_STILLS" =~ ^[0-9,]+$ ]] || { echo "bad stills list"; exit 1; }; ARGS="$ARGS --stills $IN_STILLS"; fi
           echo "python run_long.py $ARGS"
           python run_long.py $ARGS
           for f in out/*_long_*/run_log.json; do
@@ -124,5 +127,7 @@ jobs:
             out/*_long_*/metadata.json
             out/*_long_*/render_timing.json
             out/*_long_*/snap.pkl
+            out/*_long_*/job.pkl
+            out/*_long_*/still_*.png
           retention-days: 3
           if-no-files-found: ignore
