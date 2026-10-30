@@ -286,6 +286,13 @@ def template_script(fmt_name, fmt, facts, story, mood, rnd):
     parts["take"] = parts["take"] + " " + rnd.choice(JOKES)
     if story and parts["story"]:
         parts["story"] += " That is the verified headline, so the details may still change as more reporting comes in."
+    pad = ["Big moves get headlines, but steady habits build wealth. Gus rule: never let one day decide your whole plan.",
+           "If you only check one thing, check the trend, not the tick. Trends tell you where the water is flowing.",
+           "Markets love to surprise the crowd, so a calm plan usually beats a fast reaction."]
+    rnd.shuffle(pad)
+    lo = int(fmt.get("_min_words", 128))
+    while pad and len(fill(" ".join(parts.get(k, "") for k in ("hook", "body", "story", "why", "take", "poll")), facts).split()) < lo:
+        parts["body"] += " " + pad.pop()
     return parts
 
 
@@ -362,8 +369,12 @@ def _template_core(fmt_name, fmt, facts, story, mood, rnd):
                     "The ten year yield was {US10Y}. Bitcoin is {BTC_MOVE} over the past day.")
         title = hook if rnd.random() < .5 else "S&P 500 {SPX_MOVE}: " + hook[0].lower() + hook[1:]
     st = ""
-    if story and len(story["headline"].split()) <= 18:
-        st = f"The story: {story['headline'].rstrip('.')}."
+    if story and len(story["headline"].split()) <= 22:
+        # verified multi-source headline -> spoken verbatim via a placeholder (digits in it are part of the cited headline)
+        hl = re.sub(r"(\d(?:[\d.,]*\d)?)\s?([BMK])\b", lambda m: m.group(1) + {"B": " billion", "M": " million", "K": " thousand"}[m.group(2)],
+                    story["headline"].rstrip("."))
+        facts["STORY_HEADLINE"] = hl          # sources are named right after this in assemble()
+        st = "The story: {STORY_HEADLINE}."
     return {"hook": hook, "body": body, "story": st, "take": h(*TAKES[mood]),
             "poll": h(*POLLS.get(kind, POLLS["stocks"])), "title": title}
 
@@ -397,8 +408,8 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
     log = []
     for prov in cfg["llm"]["providers"]:
         if prov == "template":
-            parts = _prune(template_script(fmt_name, fmt, facts, story, mood, rnd), facts)
             tw = cfg["video"].get("template_words", (40, 100))
+            parts = _prune(template_script(fmt_name, {**fmt, "_min_words": tw[0] + 8}, facts, story, mood, rnd), facts)
             ok, why = validate(parts, facts, *tw)
             if not ok and "digit" in why and parts["story"]:   # headline contained digits -> drop story sentence
                 parts["story"] = ""
@@ -419,9 +430,10 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
             log.append("ollama: skipped (CI, no OLLAMA_HOST)")
             continue
         fn = {"groq": llm_groq, "gemini": llm_gemini, "ollama": llm_ollama}[prov]
+        fb = ""
         for attempt in range(cfg["llm"]["max_retries"] + 1):
             try:
-                parts = fn(cfg, SYSTEM, _user_prompt(fmt_name, fmt, facts, story, extra))
+                parts = fn(cfg, SYSTEM, _user_prompt(fmt_name, fmt, facts, story, extra + fb))
                 parts = {k: str(parts.get(k, "")).strip() for k in ("hook", "body", "story", "why", "take", "poll", "title")}
                 if not story: parts["story"] = ""
                 ok, why = validate(parts, facts, *cfg["video"].get("script_words", (48, 92)))
@@ -435,6 +447,10 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
                 log.append(f"{prov}#{attempt}: {why}")
                 if ok:
                     return parts, prov, log
+                fb = f" PREVIOUS ATTEMPT WAS REJECTED ({why[:200]}). Fix exactly that."
+                if why.startswith("word count"):
+                    fb += (" Write LONGER: body 70-90 words, story 30-45 words, why 20-35 words, take 12-25 words;"
+                           " total of hook+body+story+why+take+poll must be 150-190 words.")
             except Exception as e:
                 code = getattr(getattr(e, "response", None), "status_code", None)
                 log.append(f"{prov}#{attempt}: {type(e).__name__}: {str(e)[:120]}".replace(env("GEMINI_API_KEY") or "\0", "***"))
