@@ -1,0 +1,13 @@
+name: daily-long
+# Placeholder on main so the Daily Update workflow can be dispatched (dry runs) from a feature branch with --ref.
+# The full workflow (schedule 21:45 UTC + catch-up) lands with the long-form merge.
+on:
+  workflow_dispatch:
+    inputs:
+      format: {description: "daily_update | weekend_update", required: false, default: "daily_update"}
+      dry_run: {description: "dry run (render only, no upload)", type: boolean, default: true}
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "dispatch with --ref longform"
