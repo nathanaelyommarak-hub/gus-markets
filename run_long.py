@@ -299,6 +299,8 @@ def run(cfg, fmt_name, dry_run=True, no_llm=False, slot_date=None, snap_path=Non
     parts, provider, glog, keep = generate_long(cfg, facts, stories, mood, weekend, seed=job_id, recent_titles=recent, allow_llm=not no_llm)
     stories = [stories[i] for i in keep]
     log.update({"script_provider": provider, "script_log": glog, "mood": mood, "stories": [s["headline"] for s in stories]})
+    for g in glog: print(f"::notice title=script::{str(g)[:400]}")
+    (jd / "run_log.json").write_text(json.dumps(log, indent=1, default=str))       # early copy: survives a later crash
     F = lambda t: fill(t, facts)
     catch = cfg["channel"]["catchphrase"]
     secs = [("hook", F(parts["hook"])), ("overview", F(parts["overview"]))]
