@@ -29,7 +29,7 @@ video:
   min_seconds: 61            # main format (operator 2026-10-30): one story, one aha, 61-90 s, target 65-85 s
   max_seconds: 90            # TTS speed auto-adjusts (0.88-1.2) to fit
   hard_max_seconds: 90.0     # HARD cap for the final file (voice + music tail), checked before and after render
-  script_words: [125, 205]   # LLM script (hook+body+story+why+take+poll) ~ 63-88 s incl. CTA / sources / catchphrase
+  script_words: [140, 205]   # LLM script (hook+body+story+why+take+poll) ~ 63-88 s incl. CTA / sources / catchphrase
   template_words: [125, 245] # fallback template (padded with number-free context lines)
   tail: 0.8                  # music tail after the last word (shrinks to 0.3 s if needed)
   min_speed: 0.88

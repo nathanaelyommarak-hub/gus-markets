@@ -433,7 +433,7 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
     for prov in cfg["llm"]["providers"]:
         if prov == "template":
             tw = cfg["video"].get("template_words", (40, 100))
-            parts = _prune(template_script(fmt_name, {**fmt, "_min_words": tw[0] + 8}, facts, story, mood, rnd), facts)
+            parts = _prune(template_script(fmt_name, {**fmt, "_min_words": tw[0] + 45}, facts, story, mood, rnd), facts)
             ok, why = validate(parts, facts, *tw)
             if not ok and "digit" in why and parts["story"]:   # headline contained digits -> drop story sentence
                 parts["story"] = ""
