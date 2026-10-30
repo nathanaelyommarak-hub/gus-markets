@@ -254,7 +254,7 @@ llm:
   # tried in order; on any error / validation failure -> next; last resort = template
   providers: [gemini, groq, ollama, template]   # providers without an API key are skipped (no GROQ key -> straight to Gemini)
   groq:   {model: "openai/gpt-oss-120b", base_url: "https://api.groq.com/openai/v1"}
-  gemini: {model: "gemini-flash-latest"}   # full flash follows length / number rules far better than lite (CI 2026-10-30)
+  gemini: {model: "gemini-flash-latest", models: ["gemini-flash-latest", "gemini-flash-lite-latest"], timeout: 120}   # full flash follows length / number rules far better than lite (CI 2026-10-30)
   ollama: {model: "qwen2.5:3b", base_url: "http://localhost:11434"}
   temperature: 0.8
   max_retries: 3

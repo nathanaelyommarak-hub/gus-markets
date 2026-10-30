@@ -211,8 +211,10 @@ def llm_groq(cfg, sys, user):
 def llm_gemini(cfg, sys, user):
     key = env("GEMINI_API_KEY")
     if not key: raise RuntimeError("no GEMINI_API_KEY")
-    m = cfg["llm"]["gemini"]["model"]
-    r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent", timeout=60,
+    g = cfg["llm"]["gemini"]
+    ms = g.get("models") or [g["model"]]
+    m = ms[min(int(g.get("_attempt", 0)) // 2, len(ms) - 1)]     # 2 tries on the main model, then the fallback model
+    r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent", timeout=int(g.get("timeout", 120)),
                       headers={"x-goog-api-key": key},
                       json={"systemInstruction": {"parts": [{"text": sys}]}, "contents": [{"parts": [{"text": user}]}],
                             "generationConfig": {"temperature": cfg["llm"]["temperature"], "responseMimeType": "application/json"}})
@@ -455,6 +457,7 @@ def generate(cfg, fmt_name, facts, story, mood, seed):
         fb = ""
         for attempt in range(cfg["llm"]["max_retries"] + 1):
             try:
+                cfg["llm"].setdefault(prov, {})["_attempt"] = attempt
                 parts = fn(cfg, SYSTEM, _user_prompt(fmt_name, fmt, facts, story, extra + fb))
                 parts = {k: str(parts.get(k, "")).strip() for k in ("hook", "body", "story", "why", "take", "poll", "title")}
                 if not story: parts["story"] = ""
