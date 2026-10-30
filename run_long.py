@@ -382,7 +382,7 @@ def run(cfg, fmt_name, dry_run=True, no_llm=False, slot_date=None, snap_path=Non
            "source_line": f"Not financial advice \u00B7 Data: {', '.join(sources)}",
            "disclaimer_long": ("Not financial advice. For entertainment and education only. Gus is a cartoon goldfish, the voice is "
                                "synthetic, and every number comes from the public data sources listed in the description."),
-           "outro_lines": ["A new Daily Update every evening", "plus three Shorts a day"],
+           "outro_lines": ["A new Daily Update every evening", "plus a new Short every day"],
            "voice_wav": voice, "dur": dur, "words": words, "sec": sec, "chapters": chapters, "sting": (st0, st1), "cards": cards,
            "tiles": tiles, "charts": charts, "crypto": cp, "rates": rates_panel(snap, facts), "events": ev, "watch_sub": wsub,
            "stories": [{"headline": s["headline"], "sources": s["sources"], "published": s.get("published"),
