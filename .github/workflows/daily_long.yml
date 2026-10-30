@@ -21,8 +21,9 @@ concurrency: {group: finshorts-long, cancel-in-progress: false}   # own group: n
 
 jobs:
   make:
-    # same safety switch as the Shorts: scheduled runs do nothing until vars.FINSHORTS_ENABLED == 'true'
-    if: github.event_name == 'workflow_dispatch' || vars.FINSHORTS_ENABLED == 'true'
+    # safety switches: scheduled runs do nothing unless vars.FINSHORTS_ENABLED and vars.DAILY_LONG_ENABLED are both "true"
+    # scheduled runs need BOTH switches; DAILY_LONG_ENABLED stays unset until the operator approves the daily cadence
+    if: github.event_name == 'workflow_dispatch' || (vars.FINSHORTS_ENABLED == 'true' && vars.DAILY_LONG_ENABLED == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
