@@ -110,8 +110,11 @@ def validate(parts, facts, min_w=48, max_w=92):
         stripped = ALLOWED.sub("", PH.sub("", t))
         if re.search(r"\d", stripped):
             return False, f"digit outside placeholder in {k}: {stripped[:80]}"
-        if k != "title" and re.search(NUM_WORDS, stripped, re.I):
-            return False, f"number word outside placeholder in {k}"
+        m = re.search(NUM_WORDS, stripped, re.I) if k != "title" else None
+        if m:
+            ctx = stripped[max(0, m.start() - 30): m.end() + 30].strip()
+            return False, (f"number word '{m.group(0)}' outside placeholder in {k} (\"...{ctx}...\"): rephrase without any"
+                           " number words (no one, single, first, half, dozen etc.) - only placeholders may carry numbers")
     words = len(fill(full, facts).split())
     if not (min_w <= words <= max_w):
         return False, f"word count {words} not in [{min_w},{max_w}]"
