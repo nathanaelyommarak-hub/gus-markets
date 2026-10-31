@@ -112,10 +112,17 @@ jobs:
         if: always() && steps.gate.outputs.due == 'true'
         run: |
           git config user.name "finshorts-bot"; git config user.email "finshorts-bot@users.noreply.github.com"
-          git add state/long_log.json assets/people/ 2>/dev/null || true
+          [ -f state/long_log.json ] && git add -f state/long_log.json
+          git add assets/people/ 2>/dev/null || true
           if ! git diff --cached --quiet; then
             git commit -m "state: long log [skip ci]"
-            for i in 1 2 3 4 5; do git pull --rebase && git push && break; sleep 7; done
+            ok=0; for i in 1 2 3 4 5 6; do git pull --rebase && git push && { ok=1; break; }; sleep 10; done
+            [ "$ok" = 1 ] || { echo "::error title=state::long_log.json could not be pushed - next run could upload a duplicate"; exit 1; }
+          fi
+          # a real upload MUST be in the committed log (otherwise catch-up runs would publish again)
+          if [ -f out/*_long_*/run_log.json ] && grep -q '"url": "https://www.youtube.com' out/*_long_*/run_log.json; then
+            git fetch -q origin main && git show origin/main:state/long_log.json | grep -q "$(python -c "import json,glob;print(json.load(open(glob.glob('out/*_long_*/run_log.json')[0]))['youtube']['id'])")" \
+              || { echo "::error title=state::uploaded video is not in origin/main state/long_log.json"; exit 1; }
           fi
       - name: keep artifacts (3 days)
         if: always() && steps.gate.outputs.due == 'true'

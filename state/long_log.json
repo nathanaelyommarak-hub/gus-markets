@@ -1,0 +1,84 @@
+{
+ "uploads": [
+  {
+   "platform": "youtube",
+   "hash": "backfill-41140783462",
+   "job_id": "20261030_long_daily_update",
+   "remote_id": "A2K3fT7RhTQ",
+   "ts": 1793403320.0,
+   "title": "S&P 500 down 1.8%: Daily Market Update",
+   "backfilled": true,
+   "run_id": "41140783462",
+   "duplicate": false
+  },
+  {
+   "platform": "youtube",
+   "hash": "backfill-41146619546",
+   "job_id": "20261030_long_daily_update",
+   "remote_id": "suscrm00g9A",
+   "ts": 1793406543.0,
+   "title": "S&P 500 down 1.8%: Daily Market Update",
+   "backfilled": true,
+   "run_id": "41146619546",
+   "duplicate": true
+  },
+  {
+   "platform": "youtube",
+   "hash": "backfill-41153097545",
+   "job_id": "20261030_long_daily_update",
+   "remote_id": "LIXHCKNpT2g",
+   "ts": 1793411093.0,
+   "title": "S&P 500 down 1.8%: Daily Market Update",
+   "backfilled": true,
+   "run_id": "41153097545",
+   "duplicate": true
+  }
+ ],
+ "stories": [
+  {
+   "id": "df9381b173fb",
+   "headline": "Worried About Crypto Hacks? Buy Bitcoin Proxies in Stock Market Instead, Say Wall Street Firms",
+   "tokens": [
+    [
+     "about",
+     "bitcoin",
+     "buy",
+     "crypto",
+     "firms",
+     "hacks",
+     "instead",
+     "market",
+     "proxies",
+     "say",
+     "stock",
+     "street",
+     "wall",
+     "worried"
+    ]
+   ],
+   "ts": 1793435531.4726443
+  },
+  {
+   "id": "5ab30d7f9108",
+   "headline": "President Trump says they\u2019re looking into Binance hack as calls grow for crypto rules",
+   "tokens": [
+    [
+     "binance",
+     "calls",
+     "crypto",
+     "for",
+     "grow",
+     "hack",
+     "into",
+     "looking",
+     "president",
+     "rules",
+     "says",
+     "they",
+     "trump"
+    ]
+   ],
+   "ts": 1793435531.4728599
+  }
+ ]
+}

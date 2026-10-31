@@ -98,6 +98,8 @@ OFFTOPIC = re.compile(r"\b(kidnap\w*|abduct\w*|murder\w*|homicide|kill(ed|ing|s)
                       r"tortur\w*|hostage\w*|ransom\w*|prison|jail\w*|sentenced|manslaughter|gunman|gunmen|"
                       r"celebrity|actor|actress|singer|football|soccer|nba|nfl|olympic\w*|"
                       r"weather|hurricane|earthquake|wildfire|obituary|dies|dead|death)\b", re.I)
+GENERIC = re.compile(r"^(here.?s|this is) what|what happened in|(daily|weekly|morning|evening) (brief|briefing|recap|roundup|newsletter)|"
+                     r"\b(newsletter|podcast|live updates?|live blog)\b", re.I)     # roundups are not one story
 FIN_KW = set("""market markets stock stocks shares share equities index bond bonds yield yields treasury rate rates fed ecb boj
 central bank banks banking inflation cpi pce gdp jobs payrolls unemployment economy economic recession tariff tariffs trade
 dollar euro yen currency oil gold commodity commodities earnings revenue profit profits loss sales guidance forecast outlook
@@ -110,7 +112,7 @@ price prices s&p nasdaq dow wall street futures hack exploit liquidations""".spl
 
 def _keyword_relevant(s):
     text = " ".join([s["headline"]] + s.get("all_titles", [])[:3])
-    if OFFTOPIC.search(s["headline"]):
+    if OFFTOPIC.search(s["headline"]) or GENERIC.search(s["headline"]):
         return False
     return len(_tokens(text) & FIN_KW) >= 2
 

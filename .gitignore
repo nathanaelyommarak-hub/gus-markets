@@ -23,6 +23,8 @@ setup_venv.log
 state/*
 !state/.gitkeep
 !state/upload_log.json
+# Daily Update dedupe log (was ignored -> duplicate uploads on 2026-10-31)
+!state/long_log.json
 
 # --- model weights / large binaries ---
 *.onnx

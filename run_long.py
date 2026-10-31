@@ -427,6 +427,12 @@ def run(cfg, fmt_name, dry_run=True, no_llm=False, slot_date=None, snap_path=Non
         else:
             from finshorts import upload_youtube as Y
             vh = dedupe.file_hash(out_mp4)
+            prev = Y.recent_long_upload(hours=float(lc.get("dup_guard_hours", 12)))   # channel-side guard, independent of state
+            if prev:
+                dedupe.record_upload("youtube", vh, job_id, prev["id"], log=dedupe.LONG_LOG, title=prev["title"], healed=True)
+                log["youtube"] = f"skipped: a long video was already published {prev['published']} ({prev['id']}) - logged, not re-uploaded"
+                print("::warning title=duplicate guard::" + log["youtube"])
+                (jd / "run_log.json").write_text(json.dumps(log, indent=1, default=str)); return log
             ycfg = {**cfg["upload"]["youtube"], **lc.get("upload", {})}
             vid, priv = Y.upload(out_mp4, meta["youtube"], ycfg)
             dedupe.record_upload("youtube", vh, job_id, vid, log=dedupe.LONG_LOG, title=title)

@@ -95,3 +95,21 @@ def scope_check(video_id=None):
     except Exception as e:
         out["captions_list"] = "FAILED " + _why(e)
     return out
+
+
+def recent_long_upload(hours=20, min_seconds=180):
+    """Channel-side duplicate guard: newest upload longer than min_seconds within the last `hours` (Shorts are <= 90 s).
+    Returns {id, title, published} or None. Read-only (playlistItems.list + videos.list)."""
+    import datetime as dt, re as _re
+    yt = _service()
+    up = yt.channels().list(part="contentDetails", mine=True).execute()["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    ids = [i["contentDetails"]["videoId"] for i in yt.playlistItems().list(part="contentDetails", playlistId=up, maxResults=15).execute().get("items", [])]
+    if not ids: return None
+    now = dt.datetime.now(dt.timezone.utc)
+    for v in yt.videos().list(part="snippet,contentDetails", id=",".join(ids)).execute().get("items", []):
+        pub = dt.datetime.fromisoformat(v["snippet"]["publishedAt"].replace("Z", "+00:00"))
+        m = _re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", v["contentDetails"]["duration"])
+        sec = sum(int(x or 0) * k for x, k in zip(m.groups(), (3600, 60, 1))) if m else 0
+        if sec > min_seconds and (now - pub).total_seconds() < hours * 3600:
+            return {"id": v["id"], "title": v["snippet"]["title"], "published": v["snippet"]["publishedAt"]}
+    return None
