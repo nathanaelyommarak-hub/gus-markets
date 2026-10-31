@@ -192,8 +192,21 @@ def user_prompt(facts, stories, mood, weekend, recent_titles):
     return u
 
 
+FEW_NOTE = """FEW VERIFIED STORIES TODAY (N_STORIES): the total must still be 560-620 words. Write "overview" 170-210 words,
+"crypto" 110-140 words, "watch" 100-130 words (add a plain-language explainer of one concept, e.g. how bond yields affect
+stocks or what Bitcoin dominance means, without new numbers) and "take" 40-55 words."""
+EVERGREEN = [
+    "A quick explainer while we are here. When bond yields rise, the safe return on cash and bonds goes up, so investors demand more from riskier assets like stocks and crypto. That is why a move in yields can quietly drag on prices, even on a day without big headlines.",
+    "Another useful idea is Bitcoin dominance. It is simply Bitcoin's share of the whole crypto market. When it rises, money is hiding in the biggest coin. When it falls, traders are reaching for smaller, riskier coins, which usually signals a more adventurous mood.",
+    "It also helps to remember what an index really is. The S and P five hundred is a basket of large American companies, weighted by size, so the biggest firms move it the most. A strong day for a handful of giants can lift the whole index, even if most stocks are flat.",
+    "One more habit worth keeping: separate the move from the reason. Prices move first and explanations arrive later, and many of those explanations are guesses. If a reason only appears after the move, treat it as a story, not as a forecast.",
+    "A word on time frames, too. A single session tells you about mood, a month tells you about momentum, and a year tells you about fundamentals. Mixing them up is how people end up reacting to noise with long-term money.",
+]
+
+
 def _sys(facts, n, weekend):
     s = SYSTEM_LONG.replace("TIME_RULE", _time_rule(facts)).replace("N_STORIES", str(n))
+    if n < 2: s += "\n\n" + FEW_NOTE.replace("N_STORIES", f"{n} stor{'y' if n == 1 else 'ies'}")
     return s + ("\n\n" + WEEKEND_NOTE if weekend else "")
 
 
@@ -237,7 +250,11 @@ def validate_long(parts, facts, n_stories):
                        "use a {PLACEHOLDER} or rephrase without the number")
     if PH.search(parts.get("thumb", "")) or PH.search("".join(s.get("kicker", "") for s in parts["stories"])):
         bad.append("thumb / kicker must not contain placeholders")
-    for k, (lo, hi) in WORD_RANGES.items():
+    ranges = dict(WORD_RANGES)
+    ranges["crypto"] = (ranges["crypto"][0], max(ranges["crypto"][1], 135))   # weekend adds 7-day lines
+    if n_stories < 2:       # few stories -> the other sections carry the five minutes
+        ranges.update({"overview": (95, 240), "crypto": (60, 170), "watch": (40, 150), "take": (22, 65)})
+    for k, (lo, hi) in ranges.items():
         if k.startswith("story_"):
             for i, s in enumerate(parts["stories"]):
                 n = len(fill(s["text" if k == "story_text" else "why"], facts).split())
@@ -355,6 +372,12 @@ def template_long(facts, stories, mood, weekend, rnd):
                        ("S&P 500 {SPX_MOVE}: Daily Market Update" if F("SPX_MOVE") else "Daily Market Update: Stocks, Crypto & Rates")),
              "thumb": ("WEEK IN REVIEW" if weekend else ("STOCKS UP" if spx_up else "STOCKS SLIP") if F("SPX_MOVE") else "DAILY UPDATE"),
              "summary": "Stocks, crypto, gold, oil, the dollar and yields, the top verified stories, and what to watch next."}
+    # few stories / missing data -> number-free evergreen explainers keep the video at ~five minutes
+    pool = list(EVERGREEN); rnd.shuffle(pool)
+    count = lambda: sum(len(fill(t, facts).split()) for _, t in spoken_parts(parts))
+    slots = ["overview", "watch", "crypto", "overview", "watch"]
+    while pool and count() < 575:
+        parts[slots.pop(0)] += " " + pool.pop()
     return parts
 
 

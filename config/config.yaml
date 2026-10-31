@@ -326,6 +326,7 @@ long:                        # daily long-form landscape video (run_long.py / .g
   gaps: {sting: 3.2, card: 1.6, why: 0.5, story: 1.0}
   stories_max: 3             # up to 3 stocks/macro + 1 crypto (weekend: 2 + 2), each verified by 2+ independent owners
   story_dedupe_hours: 72
+  story_dedupe_hours_weekend: 20   # Week in Review may recap the week's biggest stories (weekend feeds are thin)
   llm_models: [gemini-flash-latest, gemini-flash-lite-latest]
   llm_retries: 4
   music_db: -24              # self-synthesised bed under the voice (sidechain ducked); final mix loudnorm -14 LUFS

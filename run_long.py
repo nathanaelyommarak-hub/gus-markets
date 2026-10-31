@@ -66,7 +66,7 @@ def same_event(a, b):
 
 
 def pick_stories(cfg, weekend, log):
-    lc = cfg["long"]; nmax = int(lc.get("stories_max", 4)); hrs = float(lc.get("story_dedupe_hours", 72))
+    lc = cfg["long"]; nmax = int(lc.get("stories_max", 4)); hrs = float(lc.get("story_dedupe_hours_weekend" if weekend else "story_dedupe_hours", 72))
     items, ferr = news.fetch_feeds(cfg)
     log["feed_errors"] = ferr; log["feed_items"] = len(items)
     fresh = lambda s: not dedupe.story_used_recently(s, hours=hrs, log=dedupe.LONG_LOG)
@@ -347,7 +347,7 @@ def run(cfg, fmt_name, dry_run=True, no_llm=False, slot_date=None, snap_path=Non
         if first[idx] not in sec: continue
         ts = sec[first[idx]]["t0"]
         c0 = ts - cardlen - 0.05 if idx > 1 else st1 + 0.02
-        cards.append({"t0": c0, "t1": ts - 0.05, "idx": idx})
+        cards.append({"t0": c0, "t1": ts - 0.05, "idx": len(chapters), "kind": idx})   # idx = position in chapters (no gaps if a section is missing)
         chapters.append({"name": CH_NAMES[idx], "sub": subs[idx][0], "lt": subs[idx][1], "t0": c0})
     # ---- visuals ----
     tiles, charts = build_visuals(snap, facts, now)
