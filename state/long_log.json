@@ -40,6 +40,14 @@
    "remote_id": "HZrMb2jA68w",
    "ts": 1793487853.4988787,
    "title": "Week In Review: Stocks, Crypto & What's Next"
+  },
+  {
+   "platform": "youtube",
+   "hash": "fb15b058f81fa4dcb0e9f816d9efeb93c487ea7b9ac71496fe024dd9f64e4bac",
+   "job_id": "20261101_long_weekend_update",
+   "remote_id": "9XbejgRHGnQ",
+   "ts": 1793574600.2783935,
+   "title": "Bitcoin Outflows and Weekly Market Review: What to Watch"
   }
  ],
  "stories": [
@@ -87,6 +95,74 @@
     ]
    ],
    "ts": 1793435531.4728599
+  },
+  {
+   "id": "996c17545111",
+   "headline": "Bitcoin ETF Investors Head for the Exits After Record Binance Hack",
+   "tokens": [
+    [
+     "after",
+     "billion",
+     "binance",
+     "hack",
+     "outflows",
+     "record",
+     "reopen",
+     "tracked",
+     "wallets",
+     "withdrawals"
+    ],
+    [
+     "after",
+     "billion",
+     "binance",
+     "following",
+     "hack",
+     "net",
+     "outflows",
+     "record",
+     "reopening",
+     "sees",
+     "withdrawals"
+    ],
+    [
+     "after",
+     "binance",
+     "bitcoin",
+     "etf",
+     "exits",
+     "for",
+     "hack",
+     "head",
+     "investors",
+     "record",
+     "the"
+    ],
+    [
+     "billion",
+     "binance",
+     "bitcoin",
+     "crypto",
+     "following",
+     "hack",
+     "opens",
+     "phases",
+     "starting",
+     "with",
+     "withdrawals"
+    ],
+    [
+     "after",
+     "binance",
+     "hack",
+     "one",
+     "opens",
+     "phase",
+     "says",
+     "withdrawals"
+    ]
+   ],
+   "ts": 1793574600.2788868
   }
  ]
 }
