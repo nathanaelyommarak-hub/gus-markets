@@ -62,6 +62,13 @@
    "job_id": "20261101_s01_gus_vs_myth",
    "remote_id": "AIh45nZGHNk",
    "ts": 1793559455.1336389
+  },
+  {
+   "platform": "youtube",
+   "hash": "dfa9e9fd4af0ef8f3908f4e2e86c8c0bd5fd9b98212db953cbcb2633ddc235ca",
+   "job_id": "20261102_s01_gus_explains",
+   "remote_id": "TFh-nqikxgo",
+   "ts": 1793643411.021216
   }
  ],
  "stories": [
@@ -240,6 +247,92 @@
     ]
    ],
    "ts": 1793384538.3034728
+  },
+  {
+   "id": "38eece0b3b0a",
+   "headline": "Binance hack fallout, U.S. midterms and jobs report: Crypto Week Ahead",
+   "tokens": [
+    [
+     "after",
+     "billion",
+     "binance",
+     "clients",
+     "crypto",
+     "fallout",
+     "hack",
+     "pull",
+     "studies",
+     "world"
+    ],
+    [
+     "900",
+     "after",
+     "billion",
+     "binance",
+     "bitcoin",
+     "customers",
+     "eases",
+     "pull",
+     "reopen",
+     "withdrawals"
+    ],
+    [
+     "ahead",
+     "and",
+     "binance",
+     "crypto",
+     "fallout",
+     "hack",
+     "jobs",
+     "midterms",
+     "report",
+     "week"
+    ],
+    [
+     "after",
+     "billion",
+     "binance",
+     "bitcoin",
+     "bounce",
+     "fades",
+     "live",
+     "outflows",
+     "records",
+     "starting",
+     "updates",
+     "withdrawals"
+    ],
+    [
+     "643m",
+     "after",
+     "binance",
+     "bitcoin",
+     "etfs",
+     "exit",
+     "hack",
+     "into",
+     "october",
+     "outflows",
+     "sink",
+     "with"
+    ],
+    [
+     "binance",
+     "bitcoin",
+     "daily",
+     "etfs",
+     "following",
+     "four",
+     "hack",
+     "largest",
+     "months",
+     "outflows",
+     "record",
+     "see",
+     "spot"
+    ]
+   ],
+   "ts": 1793643411.0218458
   }
  ]
 }
