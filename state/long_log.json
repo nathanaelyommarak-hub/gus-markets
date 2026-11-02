@@ -48,6 +48,14 @@
    "remote_id": "9XbejgRHGnQ",
    "ts": 1793574600.2783935,
    "title": "Bitcoin Outflows and Weekly Market Review: What to Watch"
+  },
+  {
+   "platform": "youtube",
+   "hash": "05fa02665c4eec4a7bd0e4981aface48188db89e7fac1ef0fadaddb0554ce48a",
+   "job_id": "20261102_long_daily_update",
+   "remote_id": "BC-552Hisbw",
+   "ts": 1793661204.9750452,
+   "title": "S&P 500 down 0.5%: Daily Market Update"
   }
  ],
  "stories": [
@@ -163,6 +171,60 @@
     ]
    ],
    "ts": 1793574600.2788868
+  },
+  {
+   "id": "060e487e7333",
+   "headline": "Binance Reopens Withdrawals as Hack Recovery Enters Second Week",
+   "tokens": [
+    [
+     "binance",
+     "every",
+     "hack",
+     "korea",
+     "laundering",
+     "loot",
+     "new",
+     "north",
+     "one",
+     "seconds",
+     "wallet"
+    ],
+    [
+     "binance",
+     "enters",
+     "hack",
+     "recovery",
+     "reopens",
+     "second",
+     "week",
+     "withdrawals"
+    ],
+    [
+     "900",
+     "after",
+     "billion",
+     "binance",
+     "bitcoin",
+     "customers",
+     "eases",
+     "pull",
+     "reopen",
+     "withdrawals"
+    ],
+    [
+     "binance",
+     "blames",
+     "exchange",
+     "fbi",
+     "for",
+     "hack",
+     "korea",
+     "north",
+     "reopens",
+     "withdrawals"
+    ]
+   ],
+   "ts": 1793661204.9755535
   }
  ]
 }
